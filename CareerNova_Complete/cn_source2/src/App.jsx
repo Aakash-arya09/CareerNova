@@ -1437,6 +1437,8 @@ const Icon = ({ name, size = 18, className = "" }) => {
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: #F8FAFC; }
+  html[data-theme="dark"] { background: #0B1026; }
   body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
   :root {
     --primary: #151B3D;
@@ -10639,32 +10641,58 @@ export default function App() {
     if (jobFilter?.selected && page !== "apply-job") setPage("job-detail");
   }, [jobFilter?.selected]);
 
-  // ── While Firebase is confirming auth state, show a clean loading screen ──
+  // ── While Firebase is confirming auth state, show a branded loading screen ──
   if (authLoading) return (
-    <ThemeContext.Provider value={{ darkMode, setDarkMode }}>
+    <div style={{
+      position: "fixed", inset: 0,
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: darkMode ? "#0B1026" : "#F8FAFC",
+      gap: 24, zIndex: 9999,
+    }}>
+      <style>{`
+        @keyframes cn-pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.08); opacity: 0.85; }
+        }
+        @keyframes cn-bar {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+      `}</style>
+
+      {/* Logo mark — pulses gently */}
       <div style={{
-        minHeight: "100vh", display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center",
-        background: "var(--bg)", gap: 20,
-      }}
-        data-theme={darkMode ? "dark" : "light"}>
-        <div style={{
-          width: 48, height: 48, borderRadius: 14,
-          background: "#151B3D",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 4px 20px rgba(124,58,237,0.35)",
-        }}>
-          <CnMark size={32} />
-        </div>
-        <div style={{
-          width: 36, height: 4, borderRadius: 99,
-          background: "linear-gradient(90deg,#7C3AED,#22D3EE)",
-          animation: "shimmer 1.2s ease infinite",
-          backgroundSize: "200% 100%",
-        }} />
-        <style>{`@keyframes spin-bar{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+        width: 64, height: 64, borderRadius: 20,
+        background: "linear-gradient(135deg, #151B3D, #7C3AED)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 8px 32px rgba(124,58,237,0.4)",
+        animation: "cn-pulse 1.6s ease-in-out infinite",
+      }}>
+        <CnMark size={44} />
       </div>
-    </ThemeContext.Provider>
+
+      {/* Wordmark */}
+      <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: "-0.4px", fontFamily: "Inter, sans-serif" }}>
+        <span style={{ color: darkMode ? "white" : "#151B3D" }}>Career</span>
+        <span style={{ background: "linear-gradient(135deg,#7C3AED,#22D3EE)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Nova</span>
+      </div>
+
+      {/* Thin animated progress bar */}
+      <div style={{
+        width: 120, height: 3, borderRadius: 99,
+        background: darkMode ? "#1F2937" : "#E5E7EB",
+        overflow: "hidden", position: "relative",
+      }}>
+        <div style={{
+          position: "absolute", top: 0, left: 0,
+          width: "30%", height: "100%",
+          background: "linear-gradient(90deg, #7C3AED, #22D3EE)",
+          borderRadius: 99,
+          animation: "cn-bar 1.2s ease-in-out infinite",
+        }} />
+      </div>
+    </div>
   );
 
   return (
