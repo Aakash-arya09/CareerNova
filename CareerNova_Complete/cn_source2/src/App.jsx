@@ -1437,8 +1437,6 @@ const Icon = ({ name, size = 18, className = "" }) => {
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { background: #F8FAFC; }
-  html[data-theme="dark"] { background: #0B1026; }
   body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
   :root {
     --primary: #151B3D;
@@ -6747,148 +6745,6 @@ const SegmentedChoice = ({ options, value, onChange }) => (
   </div>
 );
 
-// ─── FORGOT PASSWORD MODAL (used inside Change Password) ────────────────────
-const ForgotPasswordModal = ({ onClose, pw, setPw, pwLoading, savePassword, userEmail }) => {
-  const [sending, setSending]     = useState(false);
-  const [sent, setSent]           = useState(false);
-  const { showToast } = useContext(AppContext);
-
-  const handleForgotPw = async () => {
-    // Always use the live Firebase email — never use a stale/dummy value
-    const emailToReset = auth.currentUser?.email || userEmail;
-    if (!emailToReset) { showToast("No email found. Please log in again.", "error"); return; }
-    setSending(true);
-    try {
-      await resetPasswordEmail(emailToReset);
-      setSent(true);
-      showToast("Reset email sent! Check your inbox 📬");
-    } catch (err) {
-      showToast(err.message || "Failed to send reset email.", "error");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="overlay" onClick={onClose} />
-      <div className="card" style={{
-        position: "fixed", top: "50%", left: "50%",
-        transform: "translate(-50%,-50%)", zIndex: 100,
-        width: 400, maxWidth: "92vw", padding: 28,
-        animation: "fadeUp 0.25s ease",
-      }}>
-        {/* Header */}
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ width:34, height:34, borderRadius:10, background:"#EDE9FE", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <Icon name="key" size={16} />
-            </div>
-            <div style={{ fontWeight:700, fontSize:16, color:"var(--text)" }}>Change Password</div>
-          </div>
-          <button style={{ background:"none", border:"none", cursor:"pointer", color:"var(--text-muted)", padding:4 }}
-            onClick={onClose}>
-            <Icon name="x" size={18} />
-          </button>
-        </div>
-
-        {/* ── Email sent confirmation ── */}
-        {sent ? (
-          <div style={{ textAlign:"center", padding:"12px 0 8px" }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>📬</div>
-            <div style={{ fontWeight:700, fontSize:16, color:"var(--text)", marginBottom:8 }}>Reset email sent!</div>
-            <div style={{ fontSize:13, color:"var(--text-muted)", lineHeight:1.7, marginBottom:20 }}>
-              We sent a password reset link to<br/>
-              <strong style={{ color:"var(--text)" }}>{auth.currentUser?.email || userEmail}</strong>
-            </div>
-            <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"14px 16px", textAlign:"left", marginBottom:20 }}>
-              <div style={{ fontWeight:700, fontSize:13, color:"#166534", marginBottom:6 }}>What to do next:</div>
-              {[
-                "Open the reset email from noreply@careernova…",
-                'Click "Reset password" in the email',
-                "Set your new password on the page that opens",
-                "Come back here and log in again ✅",
-              ].map((s, i) => (
-                <div key={i} style={{ display:"flex", gap:8, fontSize:12, color:"#166534", marginBottom:4 }}>
-                  <span style={{ fontWeight:700, flexShrink:0 }}>{i+1}.</span>
-                  <span>{s}</span>
-                </div>
-              ))}
-            </div>
-            <button className="btn-primary" style={{ width:"100%", justifyContent:"center" }} onClick={onClose}>
-              Done
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Current Password + Forgot link */}
-            <div style={{ marginBottom:14 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
-                <label style={{ fontSize:13, fontWeight:600, color:"var(--text)", margin:0 }}>Current Password</label>
-                <button
-                  style={{ background:"none", border:"none", cursor: sending ? "not-allowed" : "pointer", fontSize:12, color:"var(--violet)", fontWeight:600, padding:0, opacity: sending ? 0.6 : 1 }}
-                  onClick={handleForgotPw}
-                  disabled={sending}
-                >
-                  {sending ? "Sending…" : "Forgot current password?"}
-                </button>
-              </div>
-              <input
-                type="password"
-                value={pw.current}
-                onChange={e => setPw(p => ({ ...p, current: e.target.value }))}
-                placeholder="Enter current password"
-                style={{ width:"100%", padding:"10px 14px", border:"1.5px solid var(--border)", borderRadius:10, fontSize:14, outline:"none", fontFamily:"inherit", background:"var(--card)", color:"var(--text)" }}
-                onFocus={e => e.target.style.borderColor="var(--violet)"}
-                onBlur={e => e.target.style.borderColor="var(--border)"}
-              />
-              <div style={{ fontSize:11, color:"var(--text-faint)", marginTop:4 }}>
-                Forgot it? Click the link above — we'll email a reset link instantly.
-              </div>
-            </div>
-
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:13, fontWeight:600, color:"var(--text)", display:"block", marginBottom:5 }}>New Password</label>
-              <input
-                type="password"
-                value={pw.next}
-                onChange={e => setPw(p => ({ ...p, next: e.target.value }))}
-                placeholder="At least 6 characters"
-                style={{ width:"100%", padding:"10px 14px", border:"1.5px solid var(--border)", borderRadius:10, fontSize:14, outline:"none", fontFamily:"inherit", background:"var(--card)", color:"var(--text)" }}
-                onFocus={e => e.target.style.borderColor="var(--violet)"}
-                onBlur={e => e.target.style.borderColor="var(--border)"}
-              />
-            </div>
-
-            <div style={{ marginBottom:20 }}>
-              <label style={{ fontSize:13, fontWeight:600, color:"var(--text)", display:"block", marginBottom:5 }}>Confirm New Password</label>
-              <input
-                type="password"
-                value={pw.confirm}
-                onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))}
-                placeholder="Re-enter new password"
-                style={{ width:"100%", padding:"10px 14px", border:"1.5px solid var(--border)", borderRadius:10, fontSize:14, outline:"none", fontFamily:"inherit", background:"var(--card)", color:"var(--text)" }}
-                onFocus={e => e.target.style.borderColor="var(--violet)"}
-                onBlur={e => e.target.style.borderColor="var(--border)"}
-              />
-            </div>
-
-            <div style={{ height:1, background:"var(--border)", marginBottom:16 }} />
-
-            <button className="btn-primary"
-              style={{ width:"100%", justifyContent:"center", padding:12, opacity: (!pw.current || !pw.next || !pw.confirm) ? 0.5 : 1 }}
-              onClick={savePassword}
-              disabled={pwLoading || !pw.current || !pw.next || !pw.confirm}>
-              <Icon name="key" size={15} />
-              {pwLoading ? " Updating…" : " Update Password"}
-            </button>
-          </>
-        )}
-      </div>
-    </>
-  );
-};
-
 const SettingsSection = ({ showToast }) => {
   const { darkMode, setDarkMode } = useContext(ThemeContext);
 
@@ -6899,12 +6755,9 @@ const SettingsSection = ({ showToast }) => {
   };
   const boot = readSettings();
 
-  // Always prefer the live Firebase user email — never fall back to placeholder
-  const firebaseEmail = auth.currentUser?.email || boot.email || "";
-
   const [account, setAccount] = useState({
-    email:           firebaseEmail,
-    emailVerified:   auth.currentUser?.emailVerified ?? !!boot.emailVerified,
+    email:           boot.email           || "candidate@email.com",
+    emailVerified:   !!boot.emailVerified,
     passwordUpdated: boot.passwordUpdated || "",
   });
   const [notif, setNotif] = useState({
@@ -7519,13 +7372,46 @@ const SettingsSection = ({ showToast }) => {
            MODAL 3 — Change Password (re-auth → updatePassword)
          ══════════════════════════════════════════════════════════════ */}
       {showPw && (
-        <ForgotPasswordModal
-          onClose={() => { setShowPw(false); setPw({ current:"", next:"", confirm:"" }); }}
-          pw={pw} setPw={setPw}
-          pwLoading={pwLoading}
-          savePassword={savePassword}
-          userEmail={account.email}
-        />
+        <>
+          <div className="overlay" onClick={() => setShowPw(false)} />
+          <div className="card" style={{
+            position: "fixed", top: "50%", left: "50%",
+            transform: "translate(-50%,-50%)", zIndex: 100,
+            width: 390, maxWidth: "90vw", padding: 26,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Change Password</div>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
+                onClick={() => setShowPw(false)}>
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label>Current Password</label>
+              <input type="password" value={pw.current}
+                onChange={e => setPw(p => ({ ...p, current: e.target.value }))}
+                placeholder="Enter current password" />
+            </div>
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label>New Password</label>
+              <input type="password" value={pw.next}
+                onChange={e => setPw(p => ({ ...p, next: e.target.value }))}
+                placeholder="At least 6 characters" />
+            </div>
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <label>Confirm New Password</label>
+              <input type="password" value={pw.confirm}
+                onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))}
+                placeholder="Re-enter new password" />
+            </div>
+            <button className="btn-primary"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={savePassword} disabled={pwLoading}>
+              <Icon name="key" size={15} />
+              {pwLoading ? " Updating…" : " Update Password"}
+            </button>
+          </div>
+        </>
       )}
 
     </div>
@@ -10410,15 +10296,8 @@ const ResourcesPage = () => {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  // ── Restore last page from session (fixes back button / reload page loss) ──
-  const [page, setPage] = useState(() => {
-    try { return sessionStorage.getItem("cn_page") || "home"; } catch { return "home"; }
-  });
-
-  // ── Auth: null = unknown, false = logged out, object = logged in ───────────
-  // We use null during the Firebase check so we don't flash a blank screen
+  const [page, setPage] = useState("home");
   const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState(() => {
     try {
       const saved = localStorage.getItem("cn_profile");
@@ -10456,42 +10335,7 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   };
 
-  // ── Firebase auth persistence: restore session on every reload ─────────────
-  useEffect(() => {
-    const unsub = onAuthChange((firebaseUser) => {
-      if (firebaseUser) {
-        setUser(prev => prev || {
-          name:  firebaseUser.name  || firebaseUser.email?.split("@")[0],
-          email: firebaseUser.email,
-          photo: firebaseUser.photo || null,
-          role:  "Job Seeker",
-        });
-      } else {
-        setUser(null);
-      }
-      setAuthLoading(false);
-    });
-    return () => unsub();
-  }, []);
-
-  // ── Remember the current page so reload doesn't reset to home ────────────
-  useEffect(() => {
-    try { sessionStorage.setItem("cn_page", page); } catch {}
-  }, [page]);
-
-  // ── Browser back / forward button support ─────────────────────────────────
-  useEffect(() => {
-    const handlePop = () => {
-      try {
-        const p = sessionStorage.getItem("cn_page");
-        if (p) setPage(p);
-      } catch {}
-    };
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
-  }, []);
-
-  // ── Apply + persist theme ─────────────────────────────────────────────────
+  // Apply + persist theme
   useEffect(() => {
     document.documentElement.setAttribute(
       "data-theme",
@@ -10640,60 +10484,6 @@ export default function App() {
   useEffect(() => {
     if (jobFilter?.selected && page !== "apply-job") setPage("job-detail");
   }, [jobFilter?.selected]);
-
-  // ── While Firebase is confirming auth state, show a branded loading screen ──
-  if (authLoading) return (
-    <div style={{
-      position: "fixed", inset: 0,
-      display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      background: darkMode ? "#0B1026" : "#F8FAFC",
-      gap: 24, zIndex: 9999,
-    }}>
-      <style>{`
-        @keyframes cn-pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.08); opacity: 0.85; }
-        }
-        @keyframes cn-bar {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(400%); }
-        }
-      `}</style>
-
-      {/* Logo mark — pulses gently */}
-      <div style={{
-        width: 64, height: 64, borderRadius: 20,
-        background: "linear-gradient(135deg, #151B3D, #7C3AED)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        boxShadow: "0 8px 32px rgba(124,58,237,0.4)",
-        animation: "cn-pulse 1.6s ease-in-out infinite",
-      }}>
-        <CnMark size={44} />
-      </div>
-
-      {/* Wordmark */}
-      <div style={{ fontWeight: 800, fontSize: 22, letterSpacing: "-0.4px", fontFamily: "Inter, sans-serif" }}>
-        <span style={{ color: darkMode ? "white" : "#151B3D" }}>Career</span>
-        <span style={{ background: "linear-gradient(135deg,#7C3AED,#22D3EE)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Nova</span>
-      </div>
-
-      {/* Thin animated progress bar */}
-      <div style={{
-        width: 120, height: 3, borderRadius: 99,
-        background: darkMode ? "#1F2937" : "#E5E7EB",
-        overflow: "hidden", position: "relative",
-      }}>
-        <div style={{
-          position: "absolute", top: 0, left: 0,
-          width: "30%", height: "100%",
-          background: "linear-gradient(90deg, #7C3AED, #22D3EE)",
-          borderRadius: 99,
-          animation: "cn-bar 1.2s ease-in-out infinite",
-        }} />
-      </div>
-    </div>
-  );
 
   return (
     <ThemeContext.Provider value={{ darkMode, setDarkMode }}>
