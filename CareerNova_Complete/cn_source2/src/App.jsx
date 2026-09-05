@@ -14,9 +14,6 @@ import {
   updatePassword,
   EmailAuthProvider,
   reauthenticateWithCredential,
-  RecaptchaVerifier,
-  PhoneAuthProvider,
-  updatePhoneNumber,
 } from "firebase/auth";
 
 // ─── CONTEXT ────────────────────────────────────────────────────────────────
@@ -726,6 +723,64 @@ const CATEGORIES = [
 ];
 
 // ─── ICONS ──────────────────────────────────────────────────────────────────
+// ─── CN LOGO COMPONENTS ──────────────────────────────────────────────────────
+const CnMark = ({ size = 36 }) => {
+  const r  = size * 0.30;
+  const cx = size * 0.44;
+  const cy = size * 0.50;
+  const x1 = cx + r;
+  const x2 = cx + r * 1.95;
+  const top = cy - r;
+  const bot = cy + r;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d={`M ${x1} ${top} A ${r} ${r} 0 1 0 ${x1} ${bot}`}
+        stroke="white" strokeWidth={size * 0.12} strokeLinecap="round"/>
+      <line x1={x1} y1={top} x2={x2} y2={bot}
+        stroke="#22D3EE" strokeWidth={size * 0.095} strokeLinecap="round"/>
+      <line x1={x2} y1={top} x2={x2} y2={bot}
+        stroke="#A78BFA" strokeWidth={size * 0.095} strokeLinecap="round"/>
+    </svg>
+  );
+};
+
+const CnLogo = ({ size = 36, textSize = 20 }) => (
+  <div style={{ display:"flex", alignItems:"center", gap: Math.round(size * 0.24) }}>
+    <div style={{
+      width: size, height: size, borderRadius: Math.round(size * 0.28),
+      background: "#151B3D",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      flexShrink: 0,
+      boxShadow: "0 2px 10px rgba(124,58,237,0.3)",
+    }}>
+      <CnMark size={Math.round(size * 0.7)} />
+    </div>
+    <span style={{
+      fontWeight: 800, fontSize: textSize, letterSpacing: "-0.4px", lineHeight: 1,
+      fontFamily: "inherit",
+    }}>
+      <span style={{ background:"linear-gradient(135deg,#151B3D,#4B1FBF)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>Career</span><span style={{ background:"linear-gradient(135deg,#7C3AED,#22D3EE)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>Nova</span>
+    </span>
+  </div>
+);
+
+const CnLogoDark = ({ size = 36, textSize = 20 }) => (
+  <div style={{ display:"flex", alignItems:"center", gap: Math.round(size * 0.24) }}>
+    <div style={{
+      width: size, height: size, borderRadius: Math.round(size * 0.28),
+      background: "rgba(255,255,255,0.08)",
+      border: "1px solid rgba(255,255,255,0.15)",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      flexShrink: 0,
+    }}>
+      <CnMark size={Math.round(size * 0.7)} />
+    </div>
+    <span style={{ fontWeight:800, fontSize:textSize, letterSpacing:"-0.4px", fontFamily:"inherit" }}>
+      <span style={{ color:"white" }}>Career</span><span style={{ color:"#22D3EE" }}>Nova</span>
+    </span>
+  </div>
+);
+
 const Icon = ({ name, size = 18, className = "" }) => {
   const icons = {
     search: (
@@ -1763,35 +1818,7 @@ const Navbar = ({ page, setPage, user, setUser }) => {
               flexShrink: 0,
             }}
           >
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                background: "linear-gradient(135deg, #151B3D, #7C3AED)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Icon
-                name="lightning"
-                size={18}
-                className=""
-                style={{ color: "#22D3EE" }}
-              />
-            </div>
-            <span
-              style={{
-                fontWeight: 800,
-                fontSize: 20,
-                background: "linear-gradient(135deg, #151B3D, #7C3AED)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              CareerNova
-            </span>
+            <CnLogo size={34} textSize={19} />
           </div>
           {/* Desktop Nav */}
           <div
@@ -1937,17 +1964,7 @@ const Navbar = ({ page, setPage, user, setUser }) => {
                 marginBottom: 28,
               }}
             >
-              <span
-                style={{
-                  fontWeight: 800,
-                  fontSize: 18,
-                  background: "linear-gradient(135deg, #151B3D, #7C3AED)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                }}
-              >
-                CareerNova
-              </span>
+              <CnLogo size={30} textSize={17} />
               <button
                 onClick={() => setMenuOpen(false)}
                 style={{
@@ -3109,22 +3126,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
                   marginBottom: 14,
                 }}
               >
-                <div
-                  style={{
-                    width: 30,
-                    height: 30,
-                    borderRadius: 8,
-                    background: "linear-gradient(135deg, #151B3D, #7C3AED)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Icon name="lightning" size={15} />
-                </div>
-                <span style={{ fontWeight: 800, fontSize: 18, color: "white" }}>
-                  CareerNova
-                </span>
+                <CnLogoDark size={30} textSize={17} />
               </div>
               <p style={{ fontSize: 13, lineHeight: 1.7 }}>
                 India's most advanced AI-powered job platform. Connecting talent
@@ -6756,8 +6758,6 @@ const SettingsSection = ({ showToast }) => {
   const [account, setAccount] = useState({
     email:           boot.email           || "candidate@email.com",
     emailVerified:   !!boot.emailVerified,
-    phone:           boot.phone           || "",
-    phoneVerified:   !!boot.phoneVerified,
     passwordUpdated: boot.passwordUpdated || "",
   });
   const [notif, setNotif] = useState({
@@ -6773,7 +6773,6 @@ const SettingsSection = ({ showToast }) => {
   // ── modal open/close flags ───────────────────────────────────────────────
   const [showPw,          setShowPw]          = useState(false);
   const [showEmailChange, setShowEmailChange] = useState(false);
-  const [showPhoneVerify, setShowPhoneVerify] = useState(false);
   const [showEmailVerify, setShowEmailVerify] = useState(false);
 
   // ── Change-Password form ─────────────────────────────────────────────────
@@ -6788,12 +6787,16 @@ const SettingsSection = ({ showToast }) => {
 
   // ── Email-Verify OTP modal (verify current email) ────────────────────────
   const [emailVerifyLoading, setEmailVerifyLoading] = useState(false);
-
-  // ── Phone OTP flow ───────────────────────────────────────────────────────
-  const [phoneOtp,      setPhoneOtp]      = useState("");
-  const [phoneLoading,  setPhoneLoading]  = useState(false);
-  const [phoneVerificationId, setPhoneVerificationId] = useState("");
-  const recaptchaRef = useRef(null);
+  const [emailOtp, setEmailOtp] = useState(["", "", "", "", "", ""]);
+  const [emailOtpLoading, setEmailOtpLoading] = useState(false);
+  const [emailOtpError, setEmailOtpError] = useState("");
+  const [emailOtpAttempts, setEmailOtpAttempts] = useState(0);
+  const [emailOtpTimer, setEmailOtpTimer] = useState(60);
+  const [emailOtpLockTimer, setEmailOtpLockTimer] = useState(0);
+  const [emailOtpLockDuration, setEmailOtpLockDuration] = useState(30);
+  const emailOtpRefs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
+  const emailOtpTimerRef = useRef(null);
+  const emailOtpLockRef = useRef(null);
 
   // ── persist on every state change ───────────────────────────────────────
   useEffect(() => {
@@ -6805,38 +6808,144 @@ const SettingsSection = ({ showToast }) => {
   const auth = getAuth();
 
   // ════════════════════════════════════════════════════════════════════════
-  //  1. VERIFY EMAIL  →  Firebase sends a real verification email
+  //  1. VERIFY EMAIL  →  OTP is emailed to the user, then confirmed
   // ════════════════════════════════════════════════════════════════════════
-  const startEmailVerify = async () => {
+  // Send a 6-digit OTP to the user's email via the OTP server
+  const sendEmailVerifyOtp = async () => {
     const user = auth.currentUser;
-    if (!user) { showToast("Please log in first", "error"); return; }
-    if (user.emailVerified) { showToast("Your email is already verified ✅"); return; }
+    if (!user) { showToast("Please log in first", "error"); return false; }
     setEmailVerifyLoading(true);
+    setEmailOtpError("");
     try {
-      await sendEmailVerification(user);
-      setShowEmailVerify(true);
-      showToast("Verification email sent! Check your inbox 📬");
+      const res = await fetch("http://localhost:4000/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email || account.email,
+          name: user.displayName || "",
+          purpose: "verify",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to send OTP");
+      setEmailOtp(["", "", "", "", "", ""]);
+      setEmailOtpAttempts(0);
+      setEmailOtpTimer(60);
+      clearInterval(emailOtpTimerRef.current);
+      emailOtpTimerRef.current = setInterval(
+        () =>
+          setEmailOtpTimer((t) => {
+            if (t <= 1) { clearInterval(emailOtpTimerRef.current); return 0; }
+            return t - 1;
+          }),
+        1000,
+      );
+      return true;
     } catch (err) {
       if (err.code === "auth/too-many-requests")
         showToast("Too many requests — wait a few minutes and try again.", "error");
       else
-        showToast("Could not send verification email: " + err.message, "error");
+        showToast("Could not send OTP: " + err.message, "error");
+      return false;
     } finally {
       setEmailVerifyLoading(false);
     }
   };
 
-  // Poll Firebase until user clicks the link in their inbox
-  const checkEmailVerified = async () => {
+  const startEmailVerify = async () => {
     const user = auth.currentUser;
-    if (!user) return;
-    await user.reload();
-    if (user.emailVerified) {
-      setAccount(p => ({ ...p, emailVerified: true }));
+    if (!user) { showToast("Please log in first", "error"); return; }
+    if (account.emailVerified) { showToast("Your email is already verified ✅"); return; }
+    const ok = await sendEmailVerifyOtp();
+    if (ok) {
+      setShowEmailVerify(true);
+      showToast("OTP sent! Check your email inbox 📬");
+    }
+  };
+
+  // Resend a fresh OTP from within the verify modal
+  const resendEmailOtp = async () => {
+    setEmailOtp(["", "", "", "", "", ""]);
+    setEmailOtpAttempts(0);
+    setEmailOtpLockTimer(0);
+    setEmailOtpLockDuration(30);
+    clearInterval(emailOtpLockRef.current);
+    await sendEmailVerifyOtp();
+  };
+
+  // OTP box handlers (single digit + auto-advance)
+  const handleEmailOtpKey = (i, val) => {
+    if (!/^[0-9]?$/.test(val)) return;
+    const next = [...emailOtp];
+    next[i] = val;
+    setEmailOtp(next);
+    if (val && i < 5) emailOtpRefs[i + 1].current?.focus();
+  };
+  const handleEmailOtpBackspace = (i, e) => {
+    if (e.key === "Backspace" && !emailOtp[i] && i > 0)
+      emailOtpRefs[i - 1].current?.focus();
+  };
+
+  // Temporary lockout after too many wrong attempts
+  const startEmailOtpLock = (secs) => {
+    clearInterval(emailOtpLockRef.current);
+    setEmailOtpLockTimer(secs);
+    emailOtpLockRef.current = setInterval(() => {
+      setEmailOtpLockTimer((t) => {
+        if (t <= 1) { clearInterval(emailOtpLockRef.current); return 0; }
+        return t - 1;
+      });
+    }, 1000);
+  };
+
+  // Confirm the OTP with the server, then mark the email as verified
+  const submitEmailOtp = async () => {
+    const entered = emailOtp.join("");
+    if (entered.length < 6) { setEmailOtpError("Enter the 6-digit OTP."); return; }
+    if (emailOtpLockTimer > 0) return;
+    setEmailOtpLoading(true);
+    setEmailOtpError("");
+    const verifyUser = auth.currentUser;
+    const verifyEmail = (verifyUser && verifyUser.email) || account.email;
+    try {
+      const res = await fetch("http://localhost:4000/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: verifyEmail, otp: entered }),
+      });
+      const data = await res.json();
+      if (!data.valid) {
+        if (data.reason === "expired") {
+          setEmailOtpError("OTP has expired. Please resend a new one.");
+        } else if (data.reason === "not_found") {
+          setEmailOtpError("OTP not found. Please resend a new one.");
+        } else {
+          const newAttempts = emailOtpAttempts + 1;
+          setEmailOtpAttempts(newAttempts);
+          if (newAttempts >= 3) {
+            const dur = emailOtpLockDuration;
+            setEmailOtpLockDuration((d) => d + 30);
+            startEmailOtpLock(dur);
+            setEmailOtpAttempts(0);
+            setEmailOtpError(`Too many wrong attempts. Wait ${dur}s before trying again.`);
+          } else {
+            setEmailOtpError(`Incorrect OTP. ${3 - newAttempts} attempt${3 - newAttempts === 1 ? "" : "s"} left.`);
+            setTimeout(() => emailOtpRefs[0].current?.focus(), 0);
+          }
+        }
+        return;
+      }
+      // OTP verified ✓
+      clearInterval(emailOtpTimerRef.current);
+      setAccount((p) => ({ ...p, emailVerified: true }));
       setShowEmailVerify(false);
+      setEmailOtp(["", "", "", "", "", ""]);
+      setEmailOtpAttempts(0);
       showToast("Email verified successfully ✅");
-    } else {
-      showToast("Email not verified yet — check your inbox and click the link.", "error");
+    } catch (err) {
+      setEmailOtpError(err.message || "Could not verify OTP. Try again.");
+    } finally {
+      setEmailOtpLoading(false);
     }
   };
 
@@ -6868,7 +6977,7 @@ const SettingsSection = ({ showToast }) => {
       setEmailChangeStep("sent");
       showToast("Email updated! Verification email sent to your new address 📬");
     } catch (err) {
-      if (err.code === "auth/wrong-password")
+      if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential")
         showToast("Current password is incorrect.", "error");
       else if (err.code === "auth/email-already-in-use")
         showToast("That email is already in use by another account.", "error");
@@ -6907,7 +7016,7 @@ const SettingsSection = ({ showToast }) => {
       setPw({ current: "", next: "", confirm: "" });
       showToast("Password changed successfully 🔒");
     } catch (err) {
-      if (err.code === "auth/wrong-password")
+      if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential")
         showToast("Current password is incorrect.", "error");
       else if (err.code === "auth/weak-password")
         showToast("New password is too weak — use at least 6 characters.", "error");
@@ -6917,69 +7026,6 @@ const SettingsSection = ({ showToast }) => {
         showToast("Error: " + err.message, "error");
     } finally {
       setPwLoading(false);
-    }
-  };
-
-  // ════════════════════════════════════════════════════════════════════════
-  //  4. PHONE OTP  →  Firebase RecaptchaVerifier → PhoneAuthProvider
-  // ════════════════════════════════════════════════════════════════════════
-  const startPhoneVerify = async () => {
-    if (!account.phone.trim()) { showToast("Enter a phone number first", "error"); return; }
-    const user = auth.currentUser;
-    if (!user) { showToast("Please log in first", "error"); return; }
-    setPhoneLoading(true);
-    setPhoneOtp("");
-    try {
-      // Create invisible reCAPTCHA on the button div
-      if (!window._recaptchaVerifier) {
-        window._recaptchaVerifier = new RecaptchaVerifier(auth, "phone-recaptcha-btn", {
-          size: "invisible",
-          callback: () => {},
-        });
-      }
-      const provider = new PhoneAuthProvider(auth);
-      const verificationId = await provider.verifyPhoneNumber(
-        account.phone.trim(),
-        window._recaptchaVerifier
-      );
-      setPhoneVerificationId(verificationId);
-      setShowPhoneVerify(true);
-      showToast("OTP sent to " + account.phone + " 📱");
-    } catch (err) {
-      window._recaptchaVerifier = null; // reset on error
-      if (err.code === "auth/invalid-phone-number")
-        showToast("Invalid phone number. Use format: +91XXXXXXXXXX", "error");
-      else if (err.code === "auth/too-many-requests")
-        showToast("Too many attempts — please wait a few minutes.", "error");
-      else
-        showToast("Could not send OTP: " + err.message, "error");
-    } finally {
-      setPhoneLoading(false);
-    }
-  };
-
-  const submitPhoneOtp = async () => {
-    if (!phoneOtp.trim() || phoneOtp.length < 6) {
-      showToast("Enter the 6-digit OTP", "error"); return;
-    }
-    const user = auth.currentUser;
-    if (!user) return;
-    setPhoneLoading(true);
-    try {
-      const credential = PhoneAuthProvider.credential(phoneVerificationId, phoneOtp.trim());
-      await updatePhoneNumber(user, credential);
-      setAccount(p => ({ ...p, phoneVerified: true }));
-      setShowPhoneVerify(false);
-      setPhoneOtp("");
-      window._recaptchaVerifier = null;
-      showToast("Phone number verified ✅");
-    } catch (err) {
-      if (err.code === "auth/invalid-verification-code")
-        showToast("Incorrect OTP. Please try again.", "error");
-      else
-        showToast("Verification failed: " + err.message, "error");
-    } finally {
-      setPhoneLoading(false);
     }
   };
 
@@ -7010,7 +7056,7 @@ const SettingsSection = ({ showToast }) => {
       <div className="card" style={{ padding: 22, marginBottom: 16 }}>
         <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: "var(--text)" }}>Account</div>
         <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>
-          Verify your email &amp; phone and manage your password
+          Verify your email and manage your password
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
@@ -7060,31 +7106,6 @@ const SettingsSection = ({ showToast }) => {
             )}
           </div>
 
-          {/* Phone row */}
-          <div>
-            <label>Phone Number</label>
-            <div style={{ display: "flex", gap: 10 }}>
-              <input type="tel" value={account.phone}
-                onChange={e => setAccount(p => ({ ...p, phone: e.target.value }))}
-                placeholder="+91 98765 43210" />
-              {account.phoneVerified ? (
-                <span className="badge badge-green"
-                  style={{ flexShrink: 0, alignSelf: "center", padding: "6px 12px", fontSize: 12, gap: 5 }}>
-                  <Icon name="check" size={13} /> Verified
-                </span>
-              ) : (
-                <button id="phone-recaptcha-btn" className="btn-ghost"
-                  style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                  onClick={startPhoneVerify} disabled={phoneLoading}>
-                  <Icon name="shield" size={14} />
-                  {phoneLoading ? " Sending…" : " Verify"}
-                </button>
-              )}
-            </div>
-            <small style={{ color: "var(--text-muted)", display: "block", marginTop: 5 }}>
-              Enter number in international format: +91XXXXXXXXXX
-            </small>
-          </div>
         </div>
       </div>
 
@@ -7200,7 +7221,7 @@ const SettingsSection = ({ showToast }) => {
       </button>
 
       {/* ══════════════════════════════════════════════════════════════
-           MODAL 1 — Email Verification (link sent to inbox)
+           MODAL 1 — Email Verification (OTP sent to inbox)
          ══════════════════════════════════════════════════════════════ */}
       {showEmailVerify && (
         <>
@@ -7218,26 +7239,62 @@ const SettingsSection = ({ showToast }) => {
               </button>
             </div>
             <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>
-              A verification link has been sent to{" "}
+              We've sent a 6-digit OTP to{" "}
               <strong style={{ color: "var(--text)" }}>{account.email}</strong>.
-              Open that email and click the link, then come back here and press the button below.
+              Enter it below to verify your email address.
             </p>
             <div style={{
               background: "var(--tint-violet)", color: "var(--violet)",
-              padding: "10px 14px", borderRadius: 10, fontSize: 12, marginBottom: 14, textAlign: "center",
+              padding: "10px 14px", borderRadius: 10, fontSize: 12, marginBottom: 16, textAlign: "center",
             }}>
-              📬 Check your inbox (and spam folder) for the verification email
+              📬 Check your inbox (and spam folder) for the OTP email
             </div>
-            <button className="btn-outline"
-              style={{ width: "100%", justifyContent: "center", marginBottom: 8 }}
-              onClick={startEmailVerify} disabled={emailVerifyLoading}>
-              {emailVerifyLoading ? "Sending…" : "Resend Verification Email"}
-            </button>
+
+            {/* OTP input boxes */}
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 12 }}>
+              {emailOtp.map((v, i) => (
+                <input
+                  key={i}
+                  ref={emailOtpRefs[i]}
+                  maxLength={1}
+                  value={v}
+                  onChange={(e) => handleEmailOtpKey(i, e.target.value)}
+                  onKeyDown={(e) => handleEmailOtpBackspace(i, e)}
+                  disabled={emailOtpLockTimer > 0}
+                  style={{
+                    width: 42, height: 50, borderRadius: 10,
+                    border: `2px solid ${emailOtpLockTimer > 0 ? "var(--red)" : v ? "var(--violet)" : "var(--border)"}`,
+                    textAlign: "center", fontSize: 20, fontWeight: 700, outline: "none",
+                    background: v ? "var(--tint-violet)" : "var(--card)",
+                    color: emailOtpLockTimer > 0 ? "#EF4444" : "var(--text)",
+                  }}
+                />
+              ))}
+            </div>
+
+            {emailOtpError && (
+              <p style={{ textAlign: "center", fontSize: 12, color: "#EF4444", marginBottom: 10, fontWeight: 600 }}>
+                {emailOtpError}
+              </p>
+            )}
+
             <button className="btn-primary"
-              style={{ width: "100%", justifyContent: "center" }}
-              onClick={checkEmailVerified}>
-              <Icon name="check" size={15} /> I've Verified — Check Now
+              style={{ width: "100%", justifyContent: "center", marginBottom: 10 }}
+              onClick={submitEmailOtp} disabled={emailOtpLoading || emailOtpLockTimer > 0}>
+              <Icon name="check" size={15} />
+              {emailOtpLoading ? " Verifying…" : " Verify Email"}
             </button>
+
+            <div style={{ textAlign: "center", fontSize: 13 }}>
+              {emailOtpTimer > 0 ? (
+                <span style={{ color: "var(--text-muted)" }}>
+                  Resend OTP in <span style={{ fontWeight: 700, color: "var(--violet)" }}>{emailOtpTimer}s</span>
+                </span>
+              ) : (
+                <span style={{ color: "var(--violet)", fontWeight: 600, cursor: "pointer" }}
+                  onClick={resendEmailOtp}>Resend OTP</span>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -7356,48 +7413,6 @@ const SettingsSection = ({ showToast }) => {
         </>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════
-           MODAL 4 — Phone OTP (Firebase PhoneAuthProvider)
-         ══════════════════════════════════════════════════════════════ */}
-      {showPhoneVerify && (
-        <>
-          <div className="overlay" onClick={() => setShowPhoneVerify(false)} />
-          <div className="card" style={{
-            position: "fixed", top: "50%", left: "50%",
-            transform: "translate(-50%,-50%)", zIndex: 100,
-            width: 370, maxWidth: "90vw", padding: 26,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Verify Phone Number</div>
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
-                onClick={() => setShowPhoneVerify(false)}>
-                <Icon name="x" size={18} />
-              </button>
-            </div>
-            <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
-              Enter the 6-digit OTP sent via SMS to{" "}
-              <strong style={{ color: "var(--text)" }}>{account.phone}</strong>
-            </p>
-            <input value={phoneOtp}
-              onChange={e => setPhoneOtp(e.target.value)}
-              placeholder="000000" maxLength={6} inputMode="numeric" autoFocus
-              style={{ textAlign: "center", letterSpacing: 6, fontSize: 18 }} />
-            <div style={{ marginTop: 14 }}>
-              <button className="btn-outline"
-                style={{ width: "100%", justifyContent: "center", marginBottom: 8 }}
-                onClick={startPhoneVerify} disabled={phoneLoading}>
-                {phoneLoading ? "Sending…" : "Resend OTP"}
-              </button>
-              <button className="btn-primary"
-                style={{ width: "100%", justifyContent: "center" }}
-                onClick={submitPhoneOtp} disabled={phoneLoading}>
-                <Icon name="shield" size={15} />
-                {phoneLoading ? " Verifying…" : " Verify & Continue"}
-              </button>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 };
@@ -8219,21 +8234,8 @@ const saveAccounts = (arr) =>
 
 // ─── AUTH SUB-COMPONENTS (defined outside AuthPage so React never remounts them) ──
 const AuthLogo = () => (
-  <div style={{ textAlign: "center", marginBottom: 28 }}>
-    <div
-      style={{
-        width: 48,
-        height: 48,
-        borderRadius: 14,
-        background: "linear-gradient(135deg,#151B3D,#7C3AED)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        margin: "0 auto 14px",
-      }}
-    >
-      <Icon name="lightning" size={22} />
-    </div>
+  <div style={{ display:"flex", justifyContent:"center", marginBottom:28 }}>
+    <CnLogo size={44} textSize={23} />
   </div>
 );
 

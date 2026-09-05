@@ -42,6 +42,8 @@ const otpEmailHtml = (name, otp, purpose) => `
         ${
           purpose === "signup"
             ? "Thanks for signing up! Use the OTP below to verify your email address."
+            : purpose === "verify"
+            ? "We received a request to verify your email address. Use the OTP below to confirm it."
             : "We received a request to reset your password. Use the OTP below."
         }
       </p>
@@ -96,6 +98,8 @@ app.post("/send-otp", async (req, res) => {
       subject:
         purpose === "signup"
           ? "Verify your CareerNova account"
+          : purpose === "verify"
+          ? "Verify your CareerNova email address"
           : "Reset your CareerNova password",
       html: otpEmailHtml(name, otp, purpose),
     });
