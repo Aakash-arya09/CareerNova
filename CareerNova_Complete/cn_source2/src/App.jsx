@@ -6752,10 +6752,12 @@ const ForgotPasswordModal = ({ onClose, pw, setPw, pwLoading, savePassword, user
   const { showToast } = useContext(AppContext);
 
   const handleForgotPw = async () => {
-    if (!userEmail) { showToast("No email found on your account.", "error"); return; }
+    // Always use the live Firebase email — never use a stale/dummy value
+    const emailToReset = auth.currentUser?.email || userEmail;
+    if (!emailToReset) { showToast("No email found. Please log in again.", "error"); return; }
     setSending(true);
     try {
-      await resetPasswordEmail(userEmail);
+      await resetPasswordEmail(emailToReset);
       setSent(true);
       showToast("Reset email sent! Check your inbox 📬");
     } catch (err) {
@@ -6795,7 +6797,7 @@ const ForgotPasswordModal = ({ onClose, pw, setPw, pwLoading, savePassword, user
             <div style={{ fontWeight:700, fontSize:16, color:"var(--text)", marginBottom:8 }}>Reset email sent!</div>
             <div style={{ fontSize:13, color:"var(--text-muted)", lineHeight:1.7, marginBottom:20 }}>
               We sent a password reset link to<br/>
-              <strong style={{ color:"var(--text)" }}>{userEmail}</strong>
+              <strong style={{ color:"var(--text)" }}>{auth.currentUser?.email || userEmail}</strong>
             </div>
             <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"14px 16px", textAlign:"left", marginBottom:20 }}>
               <div style={{ fontWeight:700, fontSize:13, color:"#166534", marginBottom:6 }}>What to do next:</div>
@@ -6895,9 +6897,12 @@ const SettingsSection = ({ showToast }) => {
   };
   const boot = readSettings();
 
+  // Always prefer the live Firebase user email — never fall back to placeholder
+  const firebaseEmail = auth.currentUser?.email || boot.email || "";
+
   const [account, setAccount] = useState({
-    email:           boot.email           || "candidate@email.com",
-    emailVerified:   !!boot.emailVerified,
+    email:           firebaseEmail,
+    emailVerified:   auth.currentUser?.emailVerified ?? !!boot.emailVerified,
     passwordUpdated: boot.passwordUpdated || "",
   });
   const [notif, setNotif] = useState({
