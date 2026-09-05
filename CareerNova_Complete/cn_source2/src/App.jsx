@@ -6828,6 +6828,7 @@ const SettingsSection = ({ showToast }) => {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to send OTP");
+      setOtpToken(data.token || "");
       setEmailOtp(["", "", "", "", "", ""]);
       setEmailOtpAttempts(0);
       setEmailOtpTimer(60);
@@ -6911,13 +6912,13 @@ const SettingsSection = ({ showToast }) => {
       const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: verifyEmail, otp: entered }),
+        body: JSON.stringify({ token: otpToken, otp: entered }),
       });
       const data = await res.json();
       if (!data.valid) {
         if (data.reason === "expired") {
           setEmailOtpError("OTP has expired. Please resend a new one.");
-        } else if (data.reason === "not_found") {
+        } else if (data.reason === "not_found" || data.reason === "invalid") {
           setEmailOtpError("OTP not found. Please resend a new one.");
         } else {
           const newAttempts = emailOtpAttempts + 1;
@@ -8886,7 +8887,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
     role: "seeker",
   });
   const [otpInput, setOtpInput] = useState(["", "", "", "", "", ""]);
-  // generatedOtp removed — OTP is stored server-side only
+  const [otpToken, setOtpToken] = useState(""); // signed token returned by /api/send-otp
   const [otpEmail, setOtpEmail] = useState(""); // for forgot-password flow
   const [resetPassword, setResetPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -8985,6 +8986,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Failed");
+      setOtpToken(data.token || "");
       showToast("OTP resent! Check your inbox.", "success");
     } catch (err) {
       setError(err.message || "Could not resend OTP. Try again.");
@@ -9008,10 +9010,11 @@ const AuthPage = ({ mode, setPage, setUser }) => {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to send OTP");
+      setOtpToken(data.token || "");
       showToast("OTP sent! Check your email inbox.", "success");
       setStep("otp");
     } catch (err) {
-      setError(err.message || "Could not send OTP. Make sure the OTP server is running on port 4000.");
+      setError(err.message || "Could not send OTP. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -9030,7 +9033,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
       const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.email, otp: entered }),
+        body: JSON.stringify({ token: otpToken, otp: entered }),
       });
       const data = await res.json();
       if (!data.valid) {
@@ -9038,7 +9041,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
         setOtpInput(["", "", "", "", "", ""]);
         if (data.reason === "expired") {
           setError("OTP has expired. Please request a new one.");
-        } else if (data.reason === "not_found") {
+        } else if (data.reason === "not_found" || data.reason === "invalid") {
           setError("OTP not found. Please request a new one.");
         } else {
           // wrong — apply local attempt logic for UI feedback
@@ -9160,7 +9163,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
       const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: otpEmail, otp: entered }),
+        body: JSON.stringify({ token: otpToken, otp: entered }),
       });
       const data = await res.json();
       if (!data.valid) {

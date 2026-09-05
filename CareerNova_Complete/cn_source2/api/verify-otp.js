@@ -1,6 +1,24 @@
 // api/verify-otp.js — Vercel Serverless Function
+// Stateless: validates the signed token returned by send-otp.
+// No shared memory or database needed.
 
-const otpStore = globalThis.__otpStore ?? (globalThis.__otpStore = {});
+import { createHmac } from "crypto";
+
+const SECRET = process.env.OTP_SECRET || "careernova-otp-secret-key-2026";
+
+function verifyToken(token) {
+  try {
+    const [payload, sig] = (token || "").split(".");
+    if (!payload || !sig) return { ok: false, reason: "invalid" };
+    const expected = createHmac("sha256", SECRET).update(payload).digest("base64url");
+    if (sig !== expected) return { ok: false, reason: "tampered" };
+    const { email, otp, exp } = JSON.parse(Buffer.from(payload, "base64url").toString());
+    if (Date.now() > exp) return { ok: false, reason: "expired" };
+    return { ok: true, email, otp };
+  } catch {
+    return { ok: false, reason: "invalid" };
+  }
+}
 
 export default function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -9,18 +27,17 @@ export default function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ valid: false, reason: "method_not_allowed" });
 
-  const { email, otp } = req.body ?? {};
-  const record = otpStore[email];
+  const { token, otp } = req.body ?? {};
 
-  if (!record)                         return res.json({ valid: false, reason: "not_found" });
-  if (Date.now() > record.expires) { delete otpStore[email]; return res.json({ valid: false, reason: "expired" }); }
-  if (record.attempts >= 5)            return res.json({ valid: false, reason: "too_many" });
+  if (!token) return res.json({ valid: false, reason: "not_found" });
 
-  if (record.otp !== otp) {
-    record.attempts++;
-    return res.json({ valid: false, reason: "wrong", attemptsLeft: 5 - record.attempts });
+  const result = verifyToken(token);
+  if (!result.ok) return res.json({ valid: false, reason: result.reason });
+
+  // Check the OTP the user typed matches the one in the token
+  if (result.otp !== otp) {
+    return res.json({ valid: false, reason: "wrong" });
   }
 
-  delete otpStore[email];
   return res.json({ valid: true });
 }
