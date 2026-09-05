@@ -6745,6 +6745,146 @@ const SegmentedChoice = ({ options, value, onChange }) => (
   </div>
 );
 
+// ─── FORGOT PASSWORD MODAL (used inside Change Password) ────────────────────
+const ForgotPasswordModal = ({ onClose, pw, setPw, pwLoading, savePassword, userEmail }) => {
+  const [sending, setSending]     = useState(false);
+  const [sent, setSent]           = useState(false);
+  const { showToast } = useContext(AppContext);
+
+  const handleForgotPw = async () => {
+    if (!userEmail) { showToast("No email found on your account.", "error"); return; }
+    setSending(true);
+    try {
+      await resetPasswordEmail(userEmail);
+      setSent(true);
+      showToast("Reset email sent! Check your inbox 📬");
+    } catch (err) {
+      showToast(err.message || "Failed to send reset email.", "error");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="overlay" onClick={onClose} />
+      <div className="card" style={{
+        position: "fixed", top: "50%", left: "50%",
+        transform: "translate(-50%,-50%)", zIndex: 100,
+        width: 400, maxWidth: "92vw", padding: 28,
+        animation: "fadeUp 0.25s ease",
+      }}>
+        {/* Header */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ width:34, height:34, borderRadius:10, background:"#EDE9FE", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <Icon name="key" size={16} />
+            </div>
+            <div style={{ fontWeight:700, fontSize:16, color:"var(--text)" }}>Change Password</div>
+          </div>
+          <button style={{ background:"none", border:"none", cursor:"pointer", color:"var(--text-muted)", padding:4 }}
+            onClick={onClose}>
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+
+        {/* ── Email sent confirmation ── */}
+        {sent ? (
+          <div style={{ textAlign:"center", padding:"12px 0 8px" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>📬</div>
+            <div style={{ fontWeight:700, fontSize:16, color:"var(--text)", marginBottom:8 }}>Reset email sent!</div>
+            <div style={{ fontSize:13, color:"var(--text-muted)", lineHeight:1.7, marginBottom:20 }}>
+              We sent a password reset link to<br/>
+              <strong style={{ color:"var(--text)" }}>{userEmail}</strong>
+            </div>
+            <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"14px 16px", textAlign:"left", marginBottom:20 }}>
+              <div style={{ fontWeight:700, fontSize:13, color:"#166534", marginBottom:6 }}>What to do next:</div>
+              {[
+                "Open the reset email from noreply@careernova…",
+                'Click "Reset password" in the email',
+                "Set your new password on the page that opens",
+                "Come back here and log in again ✅",
+              ].map((s, i) => (
+                <div key={i} style={{ display:"flex", gap:8, fontSize:12, color:"#166534", marginBottom:4 }}>
+                  <span style={{ fontWeight:700, flexShrink:0 }}>{i+1}.</span>
+                  <span>{s}</span>
+                </div>
+              ))}
+            </div>
+            <button className="btn-primary" style={{ width:"100%", justifyContent:"center" }} onClick={onClose}>
+              Done
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Current Password + Forgot link */}
+            <div style={{ marginBottom:14 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
+                <label style={{ fontSize:13, fontWeight:600, color:"var(--text)", margin:0 }}>Current Password</label>
+                <button
+                  style={{ background:"none", border:"none", cursor: sending ? "not-allowed" : "pointer", fontSize:12, color:"var(--violet)", fontWeight:600, padding:0, opacity: sending ? 0.6 : 1 }}
+                  onClick={handleForgotPw}
+                  disabled={sending}
+                >
+                  {sending ? "Sending…" : "Forgot current password?"}
+                </button>
+              </div>
+              <input
+                type="password"
+                value={pw.current}
+                onChange={e => setPw(p => ({ ...p, current: e.target.value }))}
+                placeholder="Enter current password"
+                style={{ width:"100%", padding:"10px 14px", border:"1.5px solid var(--border)", borderRadius:10, fontSize:14, outline:"none", fontFamily:"inherit", background:"var(--card)", color:"var(--text)" }}
+                onFocus={e => e.target.style.borderColor="var(--violet)"}
+                onBlur={e => e.target.style.borderColor="var(--border)"}
+              />
+              <div style={{ fontSize:11, color:"var(--text-faint)", marginTop:4 }}>
+                Forgot it? Click the link above — we'll email a reset link instantly.
+              </div>
+            </div>
+
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:"var(--text)", display:"block", marginBottom:5 }}>New Password</label>
+              <input
+                type="password"
+                value={pw.next}
+                onChange={e => setPw(p => ({ ...p, next: e.target.value }))}
+                placeholder="At least 6 characters"
+                style={{ width:"100%", padding:"10px 14px", border:"1.5px solid var(--border)", borderRadius:10, fontSize:14, outline:"none", fontFamily:"inherit", background:"var(--card)", color:"var(--text)" }}
+                onFocus={e => e.target.style.borderColor="var(--violet)"}
+                onBlur={e => e.target.style.borderColor="var(--border)"}
+              />
+            </div>
+
+            <div style={{ marginBottom:20 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:"var(--text)", display:"block", marginBottom:5 }}>Confirm New Password</label>
+              <input
+                type="password"
+                value={pw.confirm}
+                onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))}
+                placeholder="Re-enter new password"
+                style={{ width:"100%", padding:"10px 14px", border:"1.5px solid var(--border)", borderRadius:10, fontSize:14, outline:"none", fontFamily:"inherit", background:"var(--card)", color:"var(--text)" }}
+                onFocus={e => e.target.style.borderColor="var(--violet)"}
+                onBlur={e => e.target.style.borderColor="var(--border)"}
+              />
+            </div>
+
+            <div style={{ height:1, background:"var(--border)", marginBottom:16 }} />
+
+            <button className="btn-primary"
+              style={{ width:"100%", justifyContent:"center", padding:12, opacity: (!pw.current || !pw.next || !pw.confirm) ? 0.5 : 1 }}
+              onClick={savePassword}
+              disabled={pwLoading || !pw.current || !pw.next || !pw.confirm}>
+              <Icon name="key" size={15} />
+              {pwLoading ? " Updating…" : " Update Password"}
+            </button>
+          </>
+        )}
+      </div>
+    </>
+  );
+};
+
 const SettingsSection = ({ showToast }) => {
   const { darkMode, setDarkMode } = useContext(ThemeContext);
 
@@ -7372,46 +7512,13 @@ const SettingsSection = ({ showToast }) => {
            MODAL 3 — Change Password (re-auth → updatePassword)
          ══════════════════════════════════════════════════════════════ */}
       {showPw && (
-        <>
-          <div className="overlay" onClick={() => setShowPw(false)} />
-          <div className="card" style={{
-            position: "fixed", top: "50%", left: "50%",
-            transform: "translate(-50%,-50%)", zIndex: 100,
-            width: 390, maxWidth: "90vw", padding: 26,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Change Password</div>
-              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
-                onClick={() => setShowPw(false)}>
-                <Icon name="x" size={18} />
-              </button>
-            </div>
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label>Current Password</label>
-              <input type="password" value={pw.current}
-                onChange={e => setPw(p => ({ ...p, current: e.target.value }))}
-                placeholder="Enter current password" />
-            </div>
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <label>New Password</label>
-              <input type="password" value={pw.next}
-                onChange={e => setPw(p => ({ ...p, next: e.target.value }))}
-                placeholder="At least 6 characters" />
-            </div>
-            <div className="form-group" style={{ marginBottom: 14 }}>
-              <label>Confirm New Password</label>
-              <input type="password" value={pw.confirm}
-                onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))}
-                placeholder="Re-enter new password" />
-            </div>
-            <button className="btn-primary"
-              style={{ width: "100%", justifyContent: "center" }}
-              onClick={savePassword} disabled={pwLoading}>
-              <Icon name="key" size={15} />
-              {pwLoading ? " Updating…" : " Update Password"}
-            </button>
-          </div>
-        </>
+        <ForgotPasswordModal
+          onClose={() => { setShowPw(false); setPw({ current:"", next:"", confirm:"" }); }}
+          pw={pw} setPw={setPw}
+          pwLoading={pwLoading}
+          savePassword={savePassword}
+          userEmail={account.email}
+        />
       )}
 
     </div>
