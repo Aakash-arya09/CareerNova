@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useContext, createContext, useRef } from "react";
+import { useState, useEffect, useContext, createContext, useRef } from "react";
 import {
   signInWithGoogle,
   signUpWithEmail,
@@ -7,10 +7,23 @@ import {
   logOut,
   onAuthChange,
 } from "./firebase.js";
+import {
+  getAuth,
+  sendEmailVerification,
+  updateEmail,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  RecaptchaVerifier,
+  PhoneAuthProvider,
+  updatePhoneNumber,
+} from "firebase/auth";
 
 // ─── CONTEXT ────────────────────────────────────────────────────────────────
 const AppContext = createContext(null);
 const ThemeContext = createContext(null);
+
+// ─── Firebase handles all auth — see src/firebase.js ───────────────────────
 
 const GoogleIcon = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
@@ -32,6 +45,46 @@ const GoogleIcon = ({ size = 18 }) => (
     />
   </svg>
 );
+
+// Decode the JWT payload returned by Google Identity Services
+const decodeJwt = (token) => {
+  try {
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(""),
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+};
+
+// ─── PROFILE HELPERS ─────────────────────────────────────────────────────────
+// A new user starts with an empty profile (no fake skills / experience).
+const emptyProfile = {
+  form: { name: "", headline: "", location: "", about: "", email: "" },
+  skills: [],
+  experience: [],
+};
+
+// Compute profile strength (0–100) from the data a user has actually filled in.
+const computeProfileStrength = (profile) => {
+  const form = profile?.form || {};
+  const skills = profile?.skills || [];
+  const experience = profile?.experience || [];
+  let score = 0;
+  if (form.name) score += 10;
+  if (form.email) score += 10;
+  if (form.headline) score += 10;
+  if (form.location) score += 10;
+  if (form.about) score += 10;
+  if (skills.length > 0) score += Math.min(skills.length, 5) * 3; // up to 15
+  if (experience.length > 0) score += Math.min(experience.length, 4) * 5; // up to 20
+  return Math.min(Math.round(score), 100);
+};
 
 // ─── SAMPLE DATA ────────────────────────────────────────────────────────────
 const COMPANIES = [
@@ -1493,50 +1546,6 @@ const styles = `
   .auth-or { display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; color: var(--text-faint); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
   .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
   .divider { height: 1px; background: var(--border); margin: 24px 0; }
-  /* ── Auth (Login / Signup) split-screen layout ─────────────────────── */
-  .auth-shell { min-height: calc(100vh - 64px); display: flex; background: var(--bg); }
-  .auth-brand {
-    flex: 1 1 44%;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 60px 56px;
-    background: linear-gradient(150deg, #151B3D 0%, #2A1968 50%, #7C3AED 100%);
-    color: #fff;
-    overflow: hidden;
-  }
-  .auth-brand::before {
-    content: ""; position: absolute; width: 440px; height: 440px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(34,211,238,0.35), transparent 70%);
-    top: -160px; right: -140px;
-  }
-  .auth-brand::after {
-    content: ""; position: absolute; width: 380px; height: 380px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(124,58,237,0.5), transparent 70%);
-    bottom: -170px; left: -110px;
-  }
-  .auth-brand-inner { position: relative; z-index: 1; max-width: 420px; }
-  .auth-brand-feature { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-top: 1px solid rgba(255,255,255,0.12); }
-  .auth-check {
-    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
-    background: rgba(34,211,238,0.18); color: #22D3EE;
-    display: flex; align-items: center; justify-content: center; margin-top: 1px;
-  }
-  .auth-form-side { flex: 1 1 56%; display: flex; align-items: center; justify-content: center; padding: 40px 24px; background: var(--auth-bg); }
-  .auth-card {
-    width: 100%; max-width: 424px; background: var(--card); border-radius: 20px;
-    border: 1px solid var(--border); box-shadow: var(--shadow-lg);
-    padding: 40px 36px; animation: authFadeUp 0.45s ease;
-  }
-  @keyframes authFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-  .field-icon-wrap { position: relative; }
-  .field-icon-wrap > span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); display: flex; pointer-events: none; }
-  @media (max-width: 900px) {
-    .auth-brand { display: none; }
-    .auth-form-side { padding: 28px 16px; }
-    .auth-card { padding: 30px 24px; border-radius: 16px; }
-  }
   .sidebar-link {
     display: flex;
     align-items: center;
@@ -1870,15 +1879,7 @@ const Navbar = ({ page, setPage, user, setUser }) => {
                   </div>
                   <span className="hide-mobile">{user.name.split(" ")[0]}</span>
                 </button>
-                <button
-                  className="btn-ghost"
-                  onClick={async () => {
-                    try {
-                      await logOut();
-                    } catch (e) {}
-                    setUser(null);
-                  }}
-                >
+                <button className="btn-ghost" onClick={async () => { try { await logOut(); } catch(e){} setUser(null); }}>
                   <Icon name="logout" size={15} />
                   <span className="hide-mobile">Logout</span>
                 </button>
@@ -1974,11 +1975,7 @@ const Navbar = ({ page, setPage, user, setUser }) => {
                 </button>
               ))}
               <div
-                style={{
-                  height: 1,
-                  background: "var(--border)",
-                  margin: "12px 0",
-                }}
+                style={{ height: 1, background: "var(--border)", margin: "12px 0" }}
               />
               {user ? (
                 <>
@@ -1995,10 +1992,7 @@ const Navbar = ({ page, setPage, user, setUser }) => {
                   <button
                     className="sidebar-link"
                     onClick={async () => {
-                      try {
-                        await logOut();
-                      } catch (e) {}
-                      setUser(null);
+                      try { await logOut(); } catch(e){} setUser(null);
                       setMenuOpen(false);
                     }}
                   >
@@ -2034,26 +2028,13 @@ const Navbar = ({ page, setPage, user, setUser }) => {
                   </button>
                 </>
               )}
-              <div
-                style={{
-                  marginTop: 12,
-                  paddingTop: 14,
-                  borderTop: "1px solid var(--border)",
-                }}
-              >
+              <div style={{ marginTop: 12, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
                 <button
                   className="sidebar-link"
                   onClick={() => setDarkMode(!darkMode)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    width: "100%",
-                  }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}
                 >
-                  <span
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
-                  >
+                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <Icon name={darkMode ? "sun" : "moon"} size={16} />
                     {darkMode ? "Light Mode" : "Dark Mode"}
                   </span>
@@ -2123,13 +2104,7 @@ const JobCard = ({ job, onView, onApply, saved, onSave }) => {
               >
                 {job.title}
               </h3>
-              <p
-                style={{
-                  fontSize: 13,
-                  color: "var(--text-muted)",
-                  marginTop: 2,
-                }}
-              >
+              <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
                 {job.company}
               </p>
             </div>
@@ -2193,11 +2168,7 @@ const JobCard = ({ job, onView, onApply, saved, onSave }) => {
             ))}
             {job.skills.length > 3 && (
               <span
-                style={{
-                  fontSize: 11,
-                  color: "var(--text-faint)",
-                  padding: "4px 8px",
-                }}
+                style={{ fontSize: 11, color: "var(--text-faint)", padding: "4px 8px" }}
               >
                 +{job.skills.length - 3}
               </span>
@@ -2214,9 +2185,7 @@ const JobCard = ({ job, onView, onApply, saved, onSave }) => {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span
-                style={{ fontWeight: 700, fontSize: 14, color: "var(--green)" }}
-              >
+              <span style={{ fontWeight: 700, fontSize: 14, color: "var(--green)" }}>
                 {job.salary}
               </span>
               <span
@@ -2456,11 +2425,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
               <Icon
                 name="search"
                 size={18}
-                style={{
-                  position: "absolute",
-                  left: 12,
-                  color: "var(--text-faint)",
-                }}
+                style={{ position: "absolute", left: 12, color: "var(--text-faint)" }}
               />
               <input
                 value={searchTitle}
@@ -2490,11 +2455,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
               <Icon
                 name="location"
                 size={18}
-                style={{
-                  position: "absolute",
-                  left: 24,
-                  color: "var(--text-faint)",
-                }}
+                style={{ position: "absolute", left: 24, color: "var(--text-faint)" }}
               />
               <input
                 value={searchLoc}
@@ -2542,9 +2503,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
               <Icon name="search" size={16} /> Search Jobs
             </button>
           </div>
-          <p
-            style={{ marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}
-          >
+          <p style={{ marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
             Trending:{" "}
             <span
               onClick={() => {
@@ -2605,13 +2564,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
               >
                 {val}
               </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: "var(--text-muted)",
-                  marginTop: 2,
-                }}
-              >
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
                 {label}
               </div>
             </div>
@@ -2856,11 +2809,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
                     {f.title}
                   </div>
                   <div
-                    style={{
-                      fontSize: 13,
-                      color: "var(--text-faint)",
-                      lineHeight: 1.5,
-                    }}
+                    style={{ fontSize: 13, color: "var(--text-faint)", lineHeight: 1.5 }}
                   >
                     {f.desc}
                   </div>
@@ -2885,8 +2834,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
                     width: 80,
                     height: 80,
                     borderRadius: "50%",
-                    background:
-                      "conic-gradient(var(--violet) 92%, var(--border) 0%)",
+                    background: "conic-gradient(var(--violet) 92%, var(--border) 0%)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -3038,18 +2986,10 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
               >
                 {c.logo}
               </div>
-              <div
-                style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}
-              >
+              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}>
                 {c.name}
               </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--text-faint)",
-                  marginTop: 2,
-                }}
-              >
+              <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
                 {c.industry}
               </div>
               <div
@@ -3235,9 +3175,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
                       transition: "color 0.15s",
                     }}
                     onMouseEnter={(e) => (e.target.style.color = "#A78BFA")}
-                    onMouseLeave={(e) =>
-                      (e.target.style.color = "var(--text-faint)")
-                    }
+                    onMouseLeave={(e) => (e.target.style.color = "var(--text-faint)")}
                   >
                     {l}
                   </div>
@@ -3549,22 +3487,14 @@ const JobsPage = ({ jobFilter, setPage, setJobFilter, user }) => {
               gap: 10,
             }}
           >
-            <span
-              style={{
-                fontWeight: 600,
-                color: "var(--text-strong)",
-                fontSize: 15,
-              }}
-            >
+            <span style={{ fontWeight: 600, color: "var(--text-strong)", fontSize: 15 }}>
               <span style={{ color: "#7C3AED", fontWeight: 700 }}>
                 {filtered.length}
               </span>{" "}
               jobs found
             </span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                Sort:
-              </span>
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Sort:</span>
               <select
                 style={{ width: "auto", padding: "7px 12px", fontSize: 13 }}
                 value={sort}
@@ -3580,11 +3510,7 @@ const JobsPage = ({ jobFilter, setPage, setJobFilter, user }) => {
             <div className="card" style={{ padding: 60, textAlign: "center" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>🔍</div>
               <h3
-                style={{
-                  fontWeight: 700,
-                  color: "var(--text)",
-                  marginBottom: 6,
-                }}
+                style={{ fontWeight: 700, color: "var(--text)", marginBottom: 6 }}
               >
                 No jobs found
               </h3>
@@ -3644,10 +3570,7 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
         ? prev.filter((id) => id !== job.id)
         : [...prev, job.id],
     );
-    showToast(
-      isSaved ? "Job removed" : "Job saved! ❤️",
-      isSaved ? "error" : "success",
-    );
+    showToast(isSaved ? "Job removed" : "Job saved! ❤️", isSaved ? "error" : "success");
   };
   const isApplied = applications.find((a) => a.jobId === job.id);
   const similar = JOBS.filter(
@@ -3805,11 +3728,7 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 800,
-                    color: "var(--green)",
-                  }}
+                  style={{ fontSize: 18, fontWeight: 800, color: "var(--green)" }}
                 >
                   {job.salary}
                 </div>
@@ -3880,7 +3799,10 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
               >
                 <Icon name="share" size={16} />
               </button>
-              <button className="btn-ghost" onClick={() => setShowReport(true)}>
+              <button
+                className="btn-ghost"
+                onClick={() => setShowReport(true)}
+              >
                 <Icon name="flag" size={16} /> Report
               </button>
             </div>
@@ -3899,11 +3821,7 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
               title: "Key Responsibilities",
               content: (
                 <ul
-                  style={{
-                    color: "var(--text-soft)",
-                    lineHeight: 2,
-                    paddingLeft: 18,
-                  }}
+                  style={{ color: "var(--text-soft)", lineHeight: 2, paddingLeft: 18 }}
                 >
                   {job.responsibilities.map((r) => (
                     <li key={r}>{r}</li>
@@ -3915,11 +3833,7 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
               title: "Requirements",
               content: (
                 <ul
-                  style={{
-                    color: "var(--text-soft)",
-                    lineHeight: 2,
-                    paddingLeft: 18,
-                  }}
+                  style={{ color: "var(--text-soft)", lineHeight: 2, paddingLeft: 18 }}
                 >
                   {job.requirements.map((r) => (
                     <li key={r}>{r}</li>
@@ -4082,21 +3996,11 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
                 }}
               >
                 <div
-                  style={{
-                    fontWeight: 600,
-                    fontSize: 14,
-                    color: "var(--text)",
-                  }}
+                  style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}
                 >
                   {j.title}
                 </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--text-faint)",
-                    marginTop: 2,
-                  }}
-                >
+                <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
                   {j.company} · {j.location}
                 </div>
                 <div
@@ -4114,140 +4018,105 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
           </div>
         </div>
       </div>
-      {showReport && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,0.55)",
-            backdropFilter: "blur(3px)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
-          onClick={() => setShowReport(false)}
-        >
+        {showReport && (
           <div
-            className="card"
             style={{
-              width: "100%",
-              maxWidth: 460,
-              padding: 26,
-              maxHeight: "90vh",
-              overflowY: "auto",
+              position: "fixed",
+              inset: 0,
+              background: "rgba(15,23,42,0.55)",
+              backdropFilter: "blur(3px)",
+              zIndex: 1000,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setShowReport(false)}
           >
             <div
+              className="card"
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
+                width: "100%",
+                maxWidth: 460,
+                padding: 26,
+                maxHeight: "90vh",
+                overflowY: "auto",
               }}
+              onClick={(e) => e.stopPropagation()}
             >
               <div
-                style={{ fontWeight: 800, fontSize: 18, color: "var(--text)" }}
-              >
-                Report this job
-              </div>
-              <button
-                onClick={() => setShowReport(false)}
                 style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
                 }}
               >
-                <Icon name="x" size={18} />
-              </button>
-            </div>
-            <div
-              style={{
-                fontSize: 13,
-                color: "var(--text-muted)",
-                marginBottom: 16,
-              }}
-            >
-              Let us know why you&apos;re reporting{" "}
-              <strong style={{ color: "#7C3AED" }}>{job.title}</strong> at{" "}
-              {job.company}.
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-                marginBottom: 16,
-              }}
-            >
-              {reportReasons.map((r) => (
-                <label
-                  key={r}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "10px 12px",
-                    border: `1.5px solid ${report.reason === r ? "#7C3AED" : "var(--border)"}`,
-                    borderRadius: 10,
-                    cursor: "pointer",
-                    background:
-                      report.reason === r
-                        ? "var(--tint-violet)"
-                        : "var(--card)",
-                    fontSize: 14,
-                    color: "var(--text-strong)",
-                  }}
+                <div style={{ fontWeight: 800, fontSize: 18, color: "var(--text)" }}>
+                  Report this job
+                </div>
+                <button
+                  onClick={() => setShowReport(false)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
                 >
-                  <input
-                    type="radio"
-                    name="reportReason"
-                    checked={report.reason === r}
-                    onChange={() => setReport((p) => ({ ...p, reason: r }))}
-                    style={{ width: "auto" }}
-                  />
-                  {r}
-                </label>
-              ))}
-            </div>
-            <label
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: "var(--text-strong)",
-              }}
-            >
-              Additional details (optional)
-            </label>
-            <textarea
-              rows={3}
-              placeholder="Describe the issue..."
-              value={report.details}
-              onChange={(e) =>
-                setReport((p) => ({ ...p, details: e.target.value }))
-              }
-              style={{ marginTop: 6, marginBottom: 18 }}
-            />
-            <div
-              style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}
-            >
-              <button
-                className="btn-ghost"
-                onClick={() => setShowReport(false)}
-              >
-                Cancel
-              </button>
-              <button className="btn-primary" onClick={handleSubmitReport}>
-                <Icon name="flag" size={14} /> Submit Report
-              </button>
+                  <Icon name="x" size={18} />
+                </button>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+                Let us know why you&apos;re reporting{" "}
+                <strong style={{ color: "#7C3AED" }}>{job.title}</strong> at{" "}
+                {job.company}.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+                {reportReasons.map((r) => (
+                  <label
+                    key={r}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "10px 12px",
+                      border: `1.5px solid ${report.reason === r ? "#7C3AED" : "var(--border)"}`,
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      background: report.reason === r ? "var(--tint-violet)" : "var(--card)",
+                      fontSize: 14,
+                      color: "var(--text-strong)",
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="reportReason"
+                      checked={report.reason === r}
+                      onChange={() => setReport((p) => ({ ...p, reason: r }))}
+                      style={{ width: "auto" }}
+                    />
+                    {r}
+                  </label>
+                ))}
+              </div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)" }}>
+                Additional details (optional)
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Describe the issue..."
+                value={report.details}
+                onChange={(e) => setReport((p) => ({ ...p, details: e.target.value }))}
+                style={{ marginTop: 6, marginBottom: 18 }}
+              />
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button className="btn-ghost" onClick={() => setShowReport(false)}>
+                  Cancel
+                </button>
+                <button className="btn-primary" onClick={handleSubmitReport}>
+                  <Icon name="flag" size={14} /> Submit Report
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
     </div>
   );
 };
@@ -4318,14 +4187,10 @@ const CompaniesPage = ({ setPage, setJobFilter }) => {
             >
               {c.logo}
             </div>
-            <div
-              style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}
-            >
+            <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
               {c.name}
             </div>
-            <div
-              style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 3 }}
-            >
+            <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 3 }}>
               {c.industry}
             </div>
             <p
@@ -4508,9 +4373,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
               <Icon name="briefcase" size={12} />
               {job.experience}
             </span>
-            <span
-              style={{ fontWeight: 700, fontSize: 13, color: "var(--green)" }}
-            >
+            <span style={{ fontWeight: 700, fontSize: 13, color: "var(--green)" }}>
               {job.salary}
             </span>
           </div>
@@ -4574,9 +4437,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
               >
                 <Icon name="user" size={16} />
               </div>
-              <h3
-                style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}
-              >
+              <h3 style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
                 Personal Information
               </h3>
             </div>
@@ -4640,9 +4501,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
               >
                 <Icon name="share" size={16} />
               </div>
-              <h3
-                style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}
-              >
+              <h3 style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
                 Online Presence
               </h3>
             </div>
@@ -4694,9 +4553,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
               >
                 <Icon name="messageSquare" size={16} />
               </div>
-              <h3
-                style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}
-              >
+              <h3 style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
                 Cover Letter
               </h3>
             </div>
@@ -4710,13 +4567,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
                 }
                 style={{ resize: "vertical" }}
               />
-              <p
-                style={{
-                  fontSize: 12,
-                  color: "var(--text-faint)",
-                  marginTop: 4,
-                }}
-              >
+              <p style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>
                 {form.coverLetter.length} / 2000 characters
               </p>
             </div>
@@ -4749,9 +4600,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
               >
                 <Icon name="file" size={16} />
               </div>
-              <h3
-                style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}
-              >
+              <h3 style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
                 Resume / CV
               </h3>
             </div>
@@ -4764,9 +4613,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
                 textAlign: "center",
                 cursor: "pointer",
                 transition: "all 0.2s",
-                background: resumeFile
-                  ? "var(--tint-green)"
-                  : "var(--border-soft)",
+                background: resumeFile ? "var(--tint-green)" : "var(--border-soft)",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = "var(--violet)";
@@ -4802,28 +4649,14 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
                       margin: "0 auto 12px",
                     }}
                   >
-                    <Icon
-                      name="check"
-                      size={22}
-                      style={{ color: "var(--green)" }}
-                    />
+                    <Icon name="check" size={22} style={{ color: "var(--green)" }} />
                   </div>
                   <p
-                    style={{
-                      fontWeight: 600,
-                      color: "var(--text)",
-                      fontSize: 14,
-                    }}
+                    style={{ fontWeight: 600, color: "var(--text)", fontSize: 14 }}
                   >
                     {resumeFile.name}
                   </p>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      color: "var(--text-muted)",
-                      marginTop: 4,
-                    }}
-                  >
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
                     {(resumeFile.size / 1024).toFixed(0)} KB · Click to replace
                   </p>
                 </>
@@ -4848,21 +4681,11 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
                     />
                   </div>
                   <p
-                    style={{
-                      fontWeight: 600,
-                      color: "var(--text)",
-                      fontSize: 14,
-                    }}
+                    style={{ fontWeight: 600, color: "var(--text)", fontSize: 14 }}
                   >
                     Click to upload your resume
                   </p>
-                  <p
-                    style={{
-                      fontSize: 12,
-                      color: "var(--text-faint)",
-                      marginTop: 4,
-                    }}
-                  >
+                  <p style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>
                     PDF, DOC, or DOCX (max 5MB)
                   </p>
                 </>
@@ -4887,9 +4710,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
               }}
             >
               <Icon name="ai" size={18} style={{ color: "#7C3AED" }} />
-              <h3
-                style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}
-              >
+              <h3 style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}>
                 Application Tips
               </h3>
             </div>
@@ -4920,11 +4741,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
                     <Icon name="check" size={12} style={{ color: "white" }} />
                   </div>
                   <span
-                    style={{
-                      fontSize: 13,
-                      color: "var(--text-soft)",
-                      lineHeight: 1.5,
-                    }}
+                    style={{ fontSize: 13, color: "var(--text-soft)", lineHeight: 1.5 }}
                   >
                     {tip}
                   </span>
@@ -4975,13 +4792,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
               </>
             )}
           </button>
-          <p
-            style={{
-              fontSize: 12,
-              color: "var(--text-faint)",
-              textAlign: "center",
-            }}
-          >
+          <p style={{ fontSize: 12, color: "var(--text-faint)", textAlign: "center" }}>
             By submitting, you agree to our Terms of Service and Privacy Policy.
           </p>
         </div>
@@ -4991,7 +4802,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
 };
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
-const DashboardPage = ({ user, setPage, setJobFilter }) => {
+const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => {
   const [activeSection, setActiveSection] = useState("dashboard");
   const { savedJobs, setSavedJobs, applications, setApplications, showToast } =
     useContext(AppContext);
@@ -5017,10 +4828,11 @@ const DashboardPage = ({ user, setPage, setJobFilter }) => {
             savedJobs={savedJobs}
             setPage={setPage}
             setJobFilter={setJobFilter}
+            profile={profile}
           />
         );
       case "profile":
-        return <ProfileSection user={user} showToast={showToast} />;
+        return <ProfileSection user={user} showToast={showToast} profile={profile} setProfile={setProfile} />;
       case "applications":
         return (
           <ApplicationsSection
@@ -5099,14 +4911,10 @@ const DashboardPage = ({ user, setPage, setJobFilter }) => {
             {user?.name?.charAt(0)}
           </div>
           <div>
-            <div
-              style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}
-            >
+            <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text)" }}>
               {user?.name}
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
-              {user?.role}
-            </div>
+            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>{user?.role}</div>
           </div>
         </div>
         {sidebarItems.map((item) => (
@@ -5162,8 +4970,7 @@ const DashboardPage = ({ user, setPage, setJobFilter }) => {
               border: "none",
               cursor: "pointer",
               padding: "6px 4px",
-              color:
-                activeSection === item.id ? "#7C3AED" : "var(--text-faint)",
+              color: activeSection === item.id ? "#7C3AED" : "var(--text-faint)",
               fontSize: 10,
               fontWeight: 600,
             }}
@@ -5186,28 +4993,14 @@ const DashSection = ({
   savedJobs,
   setPage,
   setJobFilter,
+  profile,
 }) => {
   // Derived stats from real data
-  const interviewCount = applications.filter((a) =>
-    ["Interview", "Shortlisted", "Selected"].includes(a.status),
+  const interviewCount = applications.filter(
+    (a) => ["Interview", "Shortlisted", "Selected"].includes(a.status)
   ).length;
   const profileViews = applications.length * 12 + 15 + savedJobs.length * 3;
-  // Real completion from saved profile data
-  const calcCompletion = () => {
-    try {
-      const p = JSON.parse(localStorage.getItem("cn_profile") || "null");
-      let score = 0;
-      if (user?.name || p?.form?.name) score += 20;
-      if (p?.form?.headline) score += 15;
-      if (p?.form?.location) score += 10;
-      if (p?.form?.about) score += 15;
-      if (p?.skills?.length > 0) score += 20;
-      if (p?.experience?.length > 0) score += 15;
-      if (p?.photo) score += 5;
-      return Math.min(score, 100);
-    } catch { return user?.name ? 20 : 0; }
-  };
-  const completion = calcCompletion();
+  const completion = computeProfileStrength(profile);
   const stats = [
     {
       label: "Applications",
@@ -5257,13 +5050,7 @@ const DashSection = ({
                 <div style={{ fontSize: 28, fontWeight: 900, color: s.color }}>
                   {s.value}
                 </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "var(--text-muted)",
-                    marginTop: 2,
-                  }}
-                >
+                <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
                   {s.label}
                 </div>
               </div>
@@ -5308,18 +5095,13 @@ const DashSection = ({
         <div
           style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}
         >
-          {(() => {
-            try {
-              const p = JSON.parse(localStorage.getItem("cn_profile") || "null");
-              return [
-                ["Basic Info", !!(p?.form?.headline && p?.form?.location)],
-                ["About Me", !!p?.form?.about],
-                ["Skills Added", !!(p?.skills?.length > 0)],
-                ["Work Experience", !!(p?.experience?.length > 0)],
-                ["Profile Photo", !!p?.photo],
-              ];
-            } catch { return [["Basic Info", false], ["About Me", false], ["Skills Added", false], ["Work Experience", false], ["Profile Photo", false]]; }
-          })().map(([item, done]) => (
+          {[
+            ["✅ Basic Info", !!(profile?.form?.name && profile?.form?.email)],
+            ["✅ Work Experience", (profile?.experience || []).length > 0],
+            ["⚠️ Add Skills", (profile?.skills || []).length >= 3],
+            ["⚠️ Upload Resume", false],
+            ["⚠️ Add Projects", false],
+          ].map(([item, done]) => (
             <span
               key={item}
               style={{
@@ -5331,7 +5113,7 @@ const DashSection = ({
                 color: done ? "var(--green)" : "var(--amber)",
               }}
             >
-              {done ? "✅" : "⚠️"} {item}
+              {item}
             </span>
           ))}
         </div>
@@ -5385,11 +5167,7 @@ const DashSection = ({
             >
               <div>
                 <div
-                  style={{
-                    fontWeight: 600,
-                    fontSize: 14,
-                    color: "var(--text)",
-                  }}
+                  style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}
                 >
                   {j.title}
                 </div>
@@ -5417,10 +5195,11 @@ const DashSection = ({
   );
 };
 
-const ProfileSection = ({ user, showToast }) => {
-  // Load any previously-saved profile from localStorage
+const ProfileSection = ({ user, showToast, profile, setProfile }) => {
+  // Load profile from profile state or localStorage
   const loadProfile = () => {
     try {
+      if (profile?.form && (profile.skills?.length > 0 || profile.experience?.length > 0 || profile.form.name)) return profile;
       return JSON.parse(localStorage.getItem("cn_profile") || "null");
     } catch {
       return null;
@@ -5435,10 +5214,14 @@ const ProfileSection = ({ user, showToast }) => {
       location: "",
       about: "",
       email: user?.email || "",
-    },
+    }
   );
-  const [skills, setSkills] = useState(savedProfile?.skills || []);
-  const [experience, setExperience] = useState(savedProfile?.experience || []);
+  const [skills, setSkills] = useState(
+    savedProfile?.skills || []
+  );
+  const [experience, setExperience] = useState(
+    savedProfile?.experience || []
+  );
 
   const [photo, setPhoto] = useState(savedProfile?.photo || "");
 
@@ -5478,10 +5261,9 @@ const ProfileSection = ({ user, showToast }) => {
   };
 
   const saveAll = () => {
-    localStorage.setItem(
-      "cn_profile",
-      JSON.stringify({ form, skills, experience, photo }),
-    );
+    const profileData = { form, skills, experience, photo };
+    localStorage.setItem("cn_profile", JSON.stringify(profileData));
+    if (setProfile) setProfile({ form, skills, experience });
     showToast("Profile saved! ✅");
   };
 
@@ -5508,7 +5290,7 @@ const ProfileSection = ({ user, showToast }) => {
     }
     if (editingExp !== null) {
       setExperience((prev) =>
-        prev.map((e, i) => (i === editingExp ? { ...newExp } : e)),
+        prev.map((e, i) => (i === editingExp ? { ...newExp } : e))
       );
       showToast("Experience updated ✅");
     } else {
@@ -5623,9 +5405,7 @@ const ProfileSection = ({ user, showToast }) => {
             </div>
           </div>
           <div>
-            <div
-              style={{ fontWeight: 700, fontSize: 18, color: "var(--text)" }}
-            >
+            <div style={{ fontWeight: 700, fontSize: 18, color: "var(--text)" }}>
               {form.name}
             </div>
             <div style={{ color: "#7C3AED", fontSize: 14, fontWeight: 600 }}>
@@ -5825,9 +5605,7 @@ const ProfileSection = ({ user, showToast }) => {
               gap: 14,
               paddingBottom: 16,
               borderBottom:
-                i < experience.length - 1
-                  ? "1px solid var(--border-soft)"
-                  : "none",
+                i < experience.length - 1 ? "1px solid var(--border-soft)" : "none",
               marginBottom: i < experience.length - 1 ? 16 : 0,
             }}
           >
@@ -5847,29 +5625,15 @@ const ProfileSection = ({ user, showToast }) => {
               <Icon name="briefcase" size={16} />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, color: "var(--text)" }}>
-                {e.role}
-              </div>
+              <div style={{ fontWeight: 700, color: "var(--text)" }}>{e.role}</div>
               <div style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600 }}>
                 {e.company}
               </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--text-faint)",
-                  marginTop: 2,
-                }}
-              >
+              <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
                 {e.period}
               </div>
               {e.desc && (
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "var(--text-muted)",
-                    marginTop: 4,
-                  }}
-                >
+                <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
                   {e.desc}
                 </div>
               )}
@@ -6040,20 +5804,12 @@ const ApplicationsSection = ({ applications, setPage, setJobFilter }) => {
                       {app.job.title}
                     </div>
                     <div
-                      style={{
-                        fontSize: 13,
-                        color: "var(--text-muted)",
-                        marginTop: 3,
-                      }}
+                      style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 3 }}
                     >
                       {app.job.company} · {app.job.location}
                     </div>
                     <div
-                      style={{
-                        fontSize: 12,
-                        color: "var(--text-faint)",
-                        marginTop: 3,
-                      }}
+                      style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 3 }}
                     >
                       Applied on {app.appliedAt}
                     </div>
@@ -6120,8 +5876,7 @@ const ApplicationsSection = ({ applications, setPage, setJobFilter }) => {
                           style={{
                             height: 2,
                             flex: 1,
-                            background:
-                              si < statusIdx ? "#7C3AED" : "var(--border)",
+                            background: si < statusIdx ? "#7C3AED" : "var(--border)",
                           }}
                         />
                       )}
@@ -6140,8 +5895,7 @@ const ApplicationsSection = ({ applications, setPage, setJobFilter }) => {
                       key={s}
                       style={{
                         fontSize: 9,
-                        color:
-                          si <= statusIdx ? "#7C3AED" : "var(--text-faint)",
+                        color: si <= statusIdx ? "#7C3AED" : "var(--text-faint)",
                         fontWeight: si === statusIdx ? 700 : 400,
                         textAlign: "center",
                         flex: si < 4 ? 1 : "none",
@@ -6170,13 +5924,7 @@ const ApplicationsSection = ({ applications, setPage, setJobFilter }) => {
   );
 };
 
-const SavedSection = ({
-  savedJobs,
-  setSavedJobs,
-  setPage,
-  setJobFilter,
-  user,
-}) => {
+const SavedSection = ({ savedJobs, setSavedJobs, setPage, setJobFilter, user }) => {
   const { showToast, applications, setApplications } = useContext(AppContext);
   const saved = JOBS.filter((j) => savedJobs.includes(j.id));
   return (
@@ -6222,21 +5970,11 @@ const SavedSection = ({
             >
               <div>
                 <div
-                  style={{
-                    fontWeight: 700,
-                    fontSize: 15,
-                    color: "var(--text)",
-                  }}
+                  style={{ fontWeight: 700, fontSize: 15, color: "var(--text)" }}
                 >
                   {job.title}
                 </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "var(--text-faint)",
-                    marginTop: 2,
-                  }}
-                >
+                <div style={{ fontSize: 13, color: "var(--text-faint)", marginTop: 2 }}>
                   {job.company} · {job.location}
                 </div>
                 <div
@@ -6337,7 +6075,7 @@ const AlertsSection = ({ showToast }) => {
         frequency: "Weekly",
         active: true,
       },
-    ],
+    ]
   );
   const [form, setForm] = useState({
     title: "",
@@ -6358,7 +6096,10 @@ const AlertsSection = ({ showToast }) => {
       setError("Enter a job title or skills to create an alert.");
       return;
     }
-    setAlerts((prev) => [...prev, { id: Date.now(), ...form, active: true }]);
+    setAlerts((prev) => [
+      ...prev,
+      { id: Date.now(), ...form, active: true },
+    ]);
     setForm({
       title: "",
       location: "",
@@ -6467,16 +6208,8 @@ const AlertsSection = ({ showToast }) => {
             }}
           >
             <div>
-              <div style={{ fontWeight: 700, color: "var(--text)" }}>
-                {a.title}
-              </div>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: "var(--text-faint)",
-                  marginTop: 2,
-                }}
-              >
+              <div style={{ fontWeight: 700, color: "var(--text)" }}>{a.title}</div>
+              <div style={{ fontSize: 13, color: "var(--text-faint)", marginTop: 2 }}>
                 {a.location || "Any location"} · {a.frequency}
               </div>
             </div>
@@ -6492,8 +6225,8 @@ const AlertsSection = ({ showToast }) => {
                 onClick={() =>
                   setAlerts((prev) =>
                     prev.map((al) =>
-                      al.id === a.id ? { ...al, active: !al.active } : al,
-                    ),
+                      al.id === a.id ? { ...al, active: !al.active } : al
+                    )
                   )
                 }
                 title={a.active ? "Click to pause" : "Click to activate"}
@@ -6546,24 +6279,24 @@ const ResumeSection = ({ showToast }) => {
       phone: "",
       location: "",
       linkedin: "",
-    },
+    }
   );
   const [jobDetails, setJobDetails] = useState(
-    saved?.jobDetails || { title: "", company: "", duration: "", desc: "" },
+    saved?.jobDetails || { title: "", company: "", duration: "", desc: "" }
   );
   const [education, setEducation] = useState(
-    saved?.education || { degree: "", institution: "", year: "" },
+    saved?.education || { degree: "", institution: "", year: "" }
   );
   const [skills, setSkills] = useState(saved?.skills || "");
   const [custom, setCustom] = useState(
-    saved?.custom || { title: "Additional Information", content: "" },
+    saved?.custom || { title: "Additional Information", content: "" }
   );
 
   useEffect(() => {
     try {
       localStorage.setItem(
         "cn_resume",
-        JSON.stringify({ personal, jobDetails, education, skills, custom }),
+        JSON.stringify({ personal, jobDetails, education, skills, custom })
       );
     } catch (e) {}
   }, [personal, jobDetails, education, skills, custom]);
@@ -6574,7 +6307,8 @@ const ResumeSection = ({ showToast }) => {
     setJobDetails((p) => ({ ...p, [k]: e.target.value }));
   const setE = (k) => (e) =>
     setEducation((p) => ({ ...p, [k]: e.target.value }));
-  const setC = (k) => (e) => setCustom((p) => ({ ...p, [k]: e.target.value }));
+  const setC = (k) => (e) =>
+    setCustom((p) => ({ ...p, [k]: e.target.value }));
 
   const skillList = skills
     .split(",")
@@ -6717,21 +6451,11 @@ const ResumeSection = ({ showToast }) => {
               Personal Details
             </div>
             {field("Full Name", personal.name, setP("name"), "Full Name")}
-            {field(
-              "Headline",
-              personal.headline,
-              setP("headline"),
-              "Professional Headline",
-            )}
+            {field("Headline", personal.headline, setP("headline"), "Professional Headline")}
             {field("Email", personal.email, setP("email"), "Email")}
             {field("Phone", personal.phone, setP("phone"), "Phone")}
             {field("Location", personal.location, setP("location"), "Location")}
-            {field(
-              "LinkedIn",
-              personal.linkedin,
-              setP("linkedin"),
-              "LinkedIn URL",
-            )}
+            {field("LinkedIn", personal.linkedin, setP("linkedin"), "LinkedIn URL")}
           </div>
 
           {/* Work Experience */}
@@ -6748,19 +6472,10 @@ const ResumeSection = ({ showToast }) => {
             </div>
             {field("Job Title", jobDetails.title, setJ("title"), "Job Title")}
             {field("Company", jobDetails.company, setJ("company"), "Company")}
-            {field(
-              "Duration",
-              jobDetails.duration,
-              setJ("duration"),
-              "Duration (e.g. 2022 – Present)",
-            )}
+            {field("Duration", jobDetails.duration, setJ("duration"), "Duration (e.g. 2022 – Present)")}
             <label
               className="form-group"
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: "var(--text-strong)",
-              }}
+              style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)" }}
             >
               Description
               <textarea
@@ -6784,18 +6499,8 @@ const ResumeSection = ({ showToast }) => {
             >
               Education
             </div>
-            {field(
-              "Degree",
-              education.degree,
-              setE("degree"),
-              "Degree / Certification",
-            )}
-            {field(
-              "Institution",
-              education.institution,
-              setE("institution"),
-              "Institution",
-            )}
+            {field("Degree", education.degree, setE("degree"), "Degree / Certification")}
+            {field("Institution", education.institution, setE("institution"), "Institution")}
             {field("Year", education.year, setE("year"), "Year (e.g. 2019)")}
           </div>
 
@@ -6832,29 +6537,13 @@ const ResumeSection = ({ showToast }) => {
             >
               Custom Section
             </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "var(--text-faint)",
-                marginBottom: 12,
-              }}
-            >
-              Create your own section (e.g. Projects, Certifications,
-              Languages).
+            <div style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 12 }}>
+              Create your own section (e.g. Projects, Certifications, Languages).
             </div>
-            {field(
-              "Section Title",
-              custom.title,
-              setC("title"),
-              "Section title e.g. Projects",
-            )}
+            {field("Section Title", custom.title, setC("title"), "Section title e.g. Projects")}
             <label
               className="form-group"
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: "var(--text-strong)",
-              }}
+              style={{ fontSize: 13, fontWeight: 600, color: "var(--text-strong)" }}
             >
               Content
               <textarea
@@ -7039,7 +6728,8 @@ const SegmentedChoice = ({ options, value, onChange }) => (
           padding: "9px 10px",
           borderRadius: 10,
           border: `1.5px solid ${value === o.value ? "var(--violet)" : "var(--border)"}`,
-          background: value === o.value ? "var(--tint-violet)" : "transparent",
+          background:
+            value === o.value ? "var(--tint-violet)" : "transparent",
           color: value === o.value ? "var(--violet)" : "var(--text-muted)",
           fontWeight: 600,
           fontSize: 13,
@@ -7056,959 +6746,662 @@ const SegmentedChoice = ({ options, value, onChange }) => (
 const SettingsSection = ({ showToast }) => {
   const { darkMode, setDarkMode } = useContext(ThemeContext);
 
+  // ── read persisted settings ──────────────────────────────────────────────
   const readSettings = () => {
-    try {
-      return JSON.parse(localStorage.getItem("cn_settings") || "null") || {};
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(localStorage.getItem("cn_settings") || "null") || {}; }
+    catch { return {}; }
   };
   const boot = readSettings();
 
   const [account, setAccount] = useState({
-    email: boot.email || "candidate@email.com",
-    emailVerified: !!boot.emailVerified,
-    phone: boot.phone || "+91 98765 43210",
-    phoneVerified: !!boot.phoneVerified,
+    email:           boot.email           || "candidate@email.com",
+    emailVerified:   !!boot.emailVerified,
+    phone:           boot.phone           || "",
+    phoneVerified:   !!boot.phoneVerified,
     passwordUpdated: boot.passwordUpdated || "",
   });
   const [notif, setNotif] = useState({
-    jobAlerts: boot.notif?.jobAlerts ?? true,
-    appUpdates: boot.notif?.appUpdates ?? true,
+    jobAlerts:   boot.notif?.jobAlerts   ?? true,
+    appUpdates:  boot.notif?.appUpdates  ?? true,
     companyNews: boot.notif?.companyNews ?? false,
   });
   const [privacy, setPrivacy] = useState({
     profile: boot.privacy?.profile || "public",
-    resume: boot.privacy?.resume || "recruiters",
+    resume:  boot.privacy?.resume  || "recruiters",
   });
 
-  const [verifyTarget, setVerifyTarget] = useState(null); // "email" | "phone"
-  const [sentCode, setSentCode] = useState("");
-  const [code, setCode] = useState("");
-
-  const [showPw, setShowPw] = useState(false);
-  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
-
-  // Email change requires password verification
+  // ── modal open/close flags ───────────────────────────────────────────────
+  const [showPw,          setShowPw]          = useState(false);
   const [showEmailChange, setShowEmailChange] = useState(false);
-  const [emailChangePw, setEmailChangePw] = useState("");
-  const [emailChangeStep, setEmailChangeStep] = useState("password"); // "password" | "verify"
-  const [newEmail, setNewEmail] = useState("");
+  const [showPhoneVerify, setShowPhoneVerify] = useState(false);
+  const [showEmailVerify, setShowEmailVerify] = useState(false);
 
-  const persist = () => {
+  // ── Change-Password form ─────────────────────────────────────────────────
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+  const [pwLoading, setPwLoading] = useState(false);
+
+  // ── Change-Email flow ────────────────────────────────────────────────────
+  const [newEmail,       setNewEmail]       = useState("");
+  const [emailChangePw,  setEmailChangePw]  = useState("");
+  const [emailChangeStep, setEmailChangeStep] = useState("password"); // "password" | "sent"
+  const [emailLoading,   setEmailLoading]   = useState(false);
+
+  // ── Email-Verify OTP modal (verify current email) ────────────────────────
+  const [emailVerifyLoading, setEmailVerifyLoading] = useState(false);
+
+  // ── Phone OTP flow ───────────────────────────────────────────────────────
+  const [phoneOtp,      setPhoneOtp]      = useState("");
+  const [phoneLoading,  setPhoneLoading]  = useState(false);
+  const [phoneVerificationId, setPhoneVerificationId] = useState("");
+  const recaptchaRef = useRef(null);
+
+  // ── persist on every state change ───────────────────────────────────────
+  useEffect(() => {
     try {
-      localStorage.setItem(
-        "cn_settings",
-        JSON.stringify({ account, notif, privacy }),
-      );
+      localStorage.setItem("cn_settings", JSON.stringify({ ...account, notif, privacy }));
     } catch {}
-  };
-  useEffect(persist, [account, notif, privacy]);
+  }, [account, notif, privacy]);
 
-  // CONTINUE_HANDLERS
-  const sendCode = (target) => {
-    const generated = String(Math.floor(100000 + Math.random() * 900000));
-    setSentCode(generated);
-    setVerifyTarget(target);
-    setCode("");
-    showToast("Demo code: " + generated + " 🔐");
-  };
+  const auth = getAuth();
 
-  const submitCode = () => {
-    if (!code.trim()) {
-      showToast("Please enter the 6-digit code", "error");
-      return;
+  // ════════════════════════════════════════════════════════════════════════
+  //  1. VERIFY EMAIL  →  Firebase sends a real verification email
+  // ════════════════════════════════════════════════════════════════════════
+  const startEmailVerify = async () => {
+    const user = auth.currentUser;
+    if (!user) { showToast("Please log in first", "error"); return; }
+    if (user.emailVerified) { showToast("Your email is already verified ✅"); return; }
+    setEmailVerifyLoading(true);
+    try {
+      await sendEmailVerification(user);
+      setShowEmailVerify(true);
+      showToast("Verification email sent! Check your inbox 📬");
+    } catch (err) {
+      if (err.code === "auth/too-many-requests")
+        showToast("Too many requests — wait a few minutes and try again.", "error");
+      else
+        showToast("Could not send verification email: " + err.message, "error");
+    } finally {
+      setEmailVerifyLoading(false);
     }
-    if (code.trim() !== sentCode) {
-      showToast("Incorrect code. Please try again.", "error");
-      return;
-    }
-    setAccount((p) =>
-      verifyTarget === "email"
-        ? { ...p, emailVerified: true }
-        : { ...p, phoneVerified: true },
-    );
-    setVerifyTarget(null);
-    setSentCode("");
-    setCode("");
-    showToast(
-      verifyTarget === "email" ? "Email verified ✅" : "Phone verified ✅",
-    );
   };
 
-  const savePassword = () => {
-    if (!pw.current) {
-      showToast("Enter your current password", "error");
-      return;
+  // Poll Firebase until user clicks the link in their inbox
+  const checkEmailVerified = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    await user.reload();
+    if (user.emailVerified) {
+      setAccount(p => ({ ...p, emailVerified: true }));
+      setShowEmailVerify(false);
+      showToast("Email verified successfully ✅");
+    } else {
+      showToast("Email not verified yet — check your inbox and click the link.", "error");
     }
-    if (pw.next.length < 6) {
-      showToast("New password must be at least 6 characters", "error");
-      return;
-    }
-    if (pw.next !== pw.confirm) {
-      showToast("New passwords do not match", "error");
-      return;
-    }
-    setAccount((p) => ({
-      ...p,
-      passwordUpdated: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-    }));
-    setShowPw(false);
-    setPw({ current: "", next: "", confirm: "" });
-    showToast("Password changed successfully 🔒");
   };
 
-  // Email change flow (requires password + OTP verification)
+  // ════════════════════════════════════════════════════════════════════════
+  //  2. CHANGE EMAIL  →  re-auth with password → update email → verify
+  // ════════════════════════════════════════════════════════════════════════
   const startEmailChange = () => {
-    setNewEmail(account.email);
+    setNewEmail("");
     setEmailChangePw("");
     setEmailChangeStep("password");
     setShowEmailChange(true);
   };
 
-  const confirmEmailPassword = () => {
-    if (!emailChangePw) {
-      showToast("Enter your current password", "error");
-      return;
+  const confirmEmailChange = async () => {
+    if (!newEmail.includes("@")) { showToast("Enter a valid email address", "error"); return; }
+    if (!emailChangePw)          { showToast("Enter your current password", "error"); return; }
+    const user = auth.currentUser;
+    if (!user) { showToast("Please log in first", "error"); return; }
+    setEmailLoading(true);
+    try {
+      // Re-authenticate first
+      const credential = EmailAuthProvider.credential(user.email, emailChangePw);
+      await reauthenticateWithCredential(user, credential);
+      // Update the email in Firebase
+      await updateEmail(user, newEmail);
+      // Send verification to the new address
+      await sendEmailVerification(user);
+      setAccount(p => ({ ...p, email: newEmail, emailVerified: false }));
+      setEmailChangeStep("sent");
+      showToast("Email updated! Verification email sent to your new address 📬");
+    } catch (err) {
+      if (err.code === "auth/wrong-password")
+        showToast("Current password is incorrect.", "error");
+      else if (err.code === "auth/email-already-in-use")
+        showToast("That email is already in use by another account.", "error");
+      else if (err.code === "auth/requires-recent-login")
+        showToast("Session expired. Please log out and log in again, then retry.", "error");
+      else
+        showToast("Error: " + err.message, "error");
+    } finally {
+      setEmailLoading(false);
     }
-    if (emailChangePw.length < 6) {
-      showToast("Password must be at least 6 characters", "error");
-      return;
-    }
-    // Send verification OTP to the NEW email
-    const generated = String(Math.floor(100000 + Math.random() * 900000));
-    setSentCode(generated);
-    setEmailChangeStep("verify");
-    showToast("Demo code sent: " + generated + " 📧");
   };
 
-  const verifyEmailChange = () => {
-    if (!code.trim()) {
-      showToast("Please enter the 6-digit code", "error");
-      return;
+  // ════════════════════════════════════════════════════════════════════════
+  //  3. CHANGE PASSWORD  →  re-auth with current password → updatePassword
+  // ════════════════════════════════════════════════════════════════════════
+  const savePassword = async () => {
+    if (!pw.current)          { showToast("Enter your current password", "error"); return; }
+    if (pw.next.length < 6)   { showToast("New password must be at least 6 characters", "error"); return; }
+    if (pw.next !== pw.confirm){ showToast("New passwords do not match", "error"); return; }
+    const user = auth.currentUser;
+    if (!user) { showToast("Please log in first", "error"); return; }
+    setPwLoading(true);
+    try {
+      // Re-authenticate with old password first
+      const credential = EmailAuthProvider.credential(user.email, pw.current);
+      await reauthenticateWithCredential(user, credential);
+      // Now update to the new password
+      await updatePassword(user, pw.next);
+      setAccount(p => ({
+        ...p,
+        passwordUpdated: new Date().toLocaleDateString("en-US", {
+          month: "short", day: "numeric", year: "numeric"
+        }),
+      }));
+      setShowPw(false);
+      setPw({ current: "", next: "", confirm: "" });
+      showToast("Password changed successfully 🔒");
+    } catch (err) {
+      if (err.code === "auth/wrong-password")
+        showToast("Current password is incorrect.", "error");
+      else if (err.code === "auth/weak-password")
+        showToast("New password is too weak — use at least 6 characters.", "error");
+      else if (err.code === "auth/requires-recent-login")
+        showToast("Session expired. Log out and log in again, then retry.", "error");
+      else
+        showToast("Error: " + err.message, "error");
+    } finally {
+      setPwLoading(false);
     }
-    if (code.trim() !== sentCode) {
-      showToast("Incorrect code. Please try again.", "error");
-      return;
-    }
-    if (!newEmail.includes("@")) {
-      showToast("Please enter a valid email address", "error");
-      return;
-    }
-    setAccount((p) => ({ ...p, email: newEmail, emailVerified: true }));
-    setShowEmailChange(false);
-    setCode("");
-    setSentCode("");
-    setNewEmail("");
-    setEmailChangePw("");
-    showToast("Email updated successfully ✅");
   };
 
+  // ════════════════════════════════════════════════════════════════════════
+  //  4. PHONE OTP  →  Firebase RecaptchaVerifier → PhoneAuthProvider
+  // ════════════════════════════════════════════════════════════════════════
+  const startPhoneVerify = async () => {
+    if (!account.phone.trim()) { showToast("Enter a phone number first", "error"); return; }
+    const user = auth.currentUser;
+    if (!user) { showToast("Please log in first", "error"); return; }
+    setPhoneLoading(true);
+    setPhoneOtp("");
+    try {
+      // Create invisible reCAPTCHA on the button div
+      if (!window._recaptchaVerifier) {
+        window._recaptchaVerifier = new RecaptchaVerifier(auth, "phone-recaptcha-btn", {
+          size: "invisible",
+          callback: () => {},
+        });
+      }
+      const provider = new PhoneAuthProvider(auth);
+      const verificationId = await provider.verifyPhoneNumber(
+        account.phone.trim(),
+        window._recaptchaVerifier
+      );
+      setPhoneVerificationId(verificationId);
+      setShowPhoneVerify(true);
+      showToast("OTP sent to " + account.phone + " 📱");
+    } catch (err) {
+      window._recaptchaVerifier = null; // reset on error
+      if (err.code === "auth/invalid-phone-number")
+        showToast("Invalid phone number. Use format: +91XXXXXXXXXX", "error");
+      else if (err.code === "auth/too-many-requests")
+        showToast("Too many attempts — please wait a few minutes.", "error");
+      else
+        showToast("Could not send OTP: " + err.message, "error");
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const submitPhoneOtp = async () => {
+    if (!phoneOtp.trim() || phoneOtp.length < 6) {
+      showToast("Enter the 6-digit OTP", "error"); return;
+    }
+    const user = auth.currentUser;
+    if (!user) return;
+    setPhoneLoading(true);
+    try {
+      const credential = PhoneAuthProvider.credential(phoneVerificationId, phoneOtp.trim());
+      await updatePhoneNumber(user, credential);
+      setAccount(p => ({ ...p, phoneVerified: true }));
+      setShowPhoneVerify(false);
+      setPhoneOtp("");
+      window._recaptchaVerifier = null;
+      showToast("Phone number verified ✅");
+    } catch (err) {
+      if (err.code === "auth/invalid-verification-code")
+        showToast("Incorrect OTP. Please try again.", "error");
+      else
+        showToast("Verification failed: " + err.message, "error");
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  // ── persist settings button ──────────────────────────────────────────────
   const saveSettings = () => {
     try {
-      localStorage.setItem(
-        "cn_settings",
-        JSON.stringify({ account, notif, privacy }),
-      );
+      localStorage.setItem("cn_settings", JSON.stringify({ ...account, notif, privacy }));
     } catch {}
     showToast("Settings saved! ✅");
   };
 
   const notifRows = [
-    {
-      key: "jobAlerts",
-      label: "Job Alerts",
-      desc: "Get notified when new matching jobs are posted",
-    },
-    {
-      key: "appUpdates",
-      label: "Application Updates",
-      desc: "Status changes on your applications",
-    },
-    {
-      key: "companyNews",
-      label: "Company News",
-      desc: "News and announcements from companies",
-    },
+    { key: "jobAlerts",   label: "Job Alerts",          desc: "Get notified when new matching jobs are posted" },
+    { key: "appUpdates",  label: "Application Updates",  desc: "Status changes on your applications" },
+    { key: "companyNews", label: "Company News",          desc: "News and announcements from companies" },
   ];
 
-  // CONTINUE_RETURN
+  // ════════════════════════════════════════════════════════════════════════
+  //  RENDER
+  // ════════════════════════════════════════════════════════════════════════
   return (
     <div>
-      <div
-        style={{
-          fontWeight: 800,
-          fontSize: 20,
-          color: "var(--text)",
-          marginBottom: 20,
-        }}
-      >
+      <div style={{ fontWeight: 800, fontSize: 20, color: "var(--text)", marginBottom: 20 }}>
         Settings
       </div>
-      {/* Account */}
+
+      {/* ── Account Card ─────────────────────────────────────────────── */}
       <div className="card" style={{ padding: 22, marginBottom: 16 }}>
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: 16,
-            marginBottom: 4,
-            color: "var(--text)",
-          }}
-        >
-          Account
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--text-muted)",
-            marginBottom: 14,
-          }}
-        >
-          Verify your email & phone and manage your password
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: "var(--text)" }}>Account</div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>
+          Verify your email &amp; phone and manage your password
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Email row */}
           <div>
             <label>Email Address</label>
             <div style={{ display: "flex", gap: 10 }}>
-              <input
-                type="email"
-                value={account.email}
-                onChange={(e) =>
-                  setAccount((p) => ({ ...p, email: e.target.value }))
-                }
-                placeholder="you@email.com"
-                disabled
+              <input type="email" value={account.email} disabled
                 style={{ background: "var(--border-soft)", opacity: 0.9 }}
-                title="Use 'Change Email' to update after verification"
-              />
+                title="Use 'Change Email' to update" />
               {account.emailVerified ? (
-                <span
-                  className="badge badge-green"
-                  style={{
-                    flexShrink: 0,
-                    alignSelf: "center",
-                    padding: "6px 12px",
-                    fontSize: 12,
-                    gap: 5,
-                  }}
-                >
+                <span className="badge badge-green"
+                  style={{ flexShrink: 0, alignSelf: "center", padding: "6px 12px", fontSize: 12, gap: 5 }}>
                   <Icon name="check" size={13} /> Verified
                 </span>
               ) : (
-                <button
-                  className="btn-ghost"
-                  style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                  onClick={() => sendCode("email")}
-                >
-                  <Icon name="shield" size={14} /> Verify
+                <button className="btn-ghost" style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+                  onClick={startEmailVerify} disabled={emailVerifyLoading}>
+                  <Icon name="shield" size={14} />
+                  {emailVerifyLoading ? " Sending…" : " Verify"}
                 </button>
               )}
-              <button
-                className="btn-ghost"
-                style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                onClick={startEmailChange}
-              >
+              <button className="btn-ghost" style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+                onClick={startEmailChange}>
                 <Icon name="edit" size={14} /> Change Email
               </button>
             </div>
-            <small
-              style={{
-                color: "var(--text-muted)",
-                display: "block",
-                marginTop: 5,
-              }}
-            >
-              Changing your email requires your current password &amp;
-              verification code
+            <small style={{ color: "var(--text-muted)", display: "block", marginTop: 5 }}>
+              Changing your email requires your current password &amp; a verification link
             </small>
           </div>
+
+          {/* Password row */}
           <div>
             <label>Password</label>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
               <input type="password" value="••••••••" readOnly />
-              <button
-                className="btn-ghost"
-                style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                onClick={() => setShowPw(true)}
-              >
+              <button className="btn-ghost" style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+                onClick={() => setShowPw(true)}>
                 <Icon name="key" size={14} /> Change Password
               </button>
             </div>
             {account.passwordUpdated && (
-              <small
-                style={{
-                  color: "var(--text-muted)",
-                  display: "block",
-                  marginTop: 5,
-                }}
-              >
+              <small style={{ color: "var(--text-muted)", display: "block", marginTop: 5 }}>
                 Last updated: {account.passwordUpdated}
               </small>
             )}
           </div>
+
+          {/* Phone row */}
           <div>
             <label>Phone Number</label>
             <div style={{ display: "flex", gap: 10 }}>
-              <input
-                type="tel"
-                value={account.phone}
-                onChange={(e) =>
-                  setAccount((p) => ({ ...p, phone: e.target.value }))
-                }
-                placeholder="+91 98765 43210"
-              />
+              <input type="tel" value={account.phone}
+                onChange={e => setAccount(p => ({ ...p, phone: e.target.value }))}
+                placeholder="+91 98765 43210" />
               {account.phoneVerified ? (
-                <span
-                  className="badge badge-green"
-                  style={{
-                    flexShrink: 0,
-                    alignSelf: "center",
-                    padding: "6px 12px",
-                    fontSize: 12,
-                    gap: 5,
-                  }}
-                >
+                <span className="badge badge-green"
+                  style={{ flexShrink: 0, alignSelf: "center", padding: "6px 12px", fontSize: 12, gap: 5 }}>
                   <Icon name="check" size={13} /> Verified
                 </span>
               ) : (
-                <button
-                  className="btn-ghost"
+                <button id="phone-recaptcha-btn" className="btn-ghost"
                   style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                  onClick={() => sendCode("phone")}
-                >
-                  <Icon name="shield" size={14} /> Verify
+                  onClick={startPhoneVerify} disabled={phoneLoading}>
+                  <Icon name="shield" size={14} />
+                  {phoneLoading ? " Sending…" : " Verify"}
                 </button>
               )}
             </div>
+            <small style={{ color: "var(--text-muted)", display: "block", marginTop: 5 }}>
+              Enter number in international format: +91XXXXXXXXXX
+            </small>
           </div>
         </div>
       </div>
-      {/* Notifications */}
+
+      {/* ── Notifications Card ──────────────────────────────────────── */}
       <div className="card" style={{ padding: 22, marginBottom: 16 }}>
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: 16,
-            marginBottom: 4,
-            color: "var(--text)",
-          }}
-        >
-          Notifications
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--text-muted)",
-            marginBottom: 10,
-          }}
-        >
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: "var(--text)" }}>Notifications</div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10 }}>
           Choose what you want to be notified about
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "10px 12px",
-            borderRadius: 10,
-            background: "var(--tint-violet)",
-            marginBottom: 8,
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--violet)",
-          }}
-        >
-          <span>
-            {notifRows.filter((r) => notif[r.key]).length} of {notifRows.length}{" "}
-            notifications enabled
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "10px 12px", borderRadius: 10, background: "var(--tint-violet)",
+          marginBottom: 8, fontSize: 12, fontWeight: 600, color: "var(--violet)",
+        }}>
+          <span>{notifRows.filter(r => notif[r.key]).length} of {notifRows.length} notifications enabled</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <Icon name="bell" size={13} />
+            {notifRows.every(r => notif[r.key]) ? "All active"
+              : notifRows.every(r => !notif[r.key]) ? "All muted"
+              : "Partially active"}
           </span>
-          {notifRows.every((r) => notif[r.key]) ? (
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <Icon name="bell" size={13} /> All active
-            </span>
-          ) : notifRows.every((r) => !notif[r.key]) ? (
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <Icon name="bell" size={13} /> All muted
-            </span>
-          ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <Icon name="bell" size={13} /> Partially active
-            </span>
-          )}
         </div>
-        {notifRows.map((r) => (
-          <div
-            key={r.key}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "12px 0",
-              borderBottom: "1px solid var(--border-soft)",
-            }}
-          >
+        {notifRows.map(r => (
+          <div key={r.key} style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 0", borderBottom: "1px solid var(--border-soft)",
+          }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span
-                  style={{
-                    fontWeight: 600,
-                    fontSize: 14,
-                    color: "var(--text)",
-                  }}
-                >
-                  {r.label}
-                </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.5,
-                    padding: "2px 8px",
-                    borderRadius: 999,
-                    background: notif[r.key]
-                      ? "var(--tint-green)"
-                      : "var(--border-soft)",
-                    color: notif[r.key] ? "var(--green)" : "var(--text-faint)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: notif[r.key]
-                        ? "var(--green)"
-                        : "var(--text-faint)",
-                    }}
-                  />
+                <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>{r.label}</span>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5,
+                  padding: "2px 8px", borderRadius: 999,
+                  background: notif[r.key] ? "var(--tint-green)" : "var(--border-soft)",
+                  color: notif[r.key] ? "var(--green)" : "var(--text-faint)",
+                  display: "flex", alignItems: "center", gap: 4,
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%",
+                    background: notif[r.key] ? "var(--green)" : "var(--text-faint)" }} />
                   {notif[r.key] ? "On" : "Off"}
                 </span>
               </div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                {r.desc}
-              </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{r.desc}</div>
             </div>
-            <ToggleSwitch
-              on={notif[r.key]}
-              onChange={(v) => setNotif((p) => ({ ...p, [r.key]: v }))}
-            />
+            <ToggleSwitch on={notif[r.key]} onChange={v => setNotif(p => ({ ...p, [r.key]: v }))} />
           </div>
         ))}
       </div>
-      {/* Privacy */}
+
+      {/* ── Privacy Card ─────────────────────────────────────────────── */}
       <div className="card" style={{ padding: 22, marginBottom: 16 }}>
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: 16,
-            marginBottom: 4,
-            color: "var(--text)",
-          }}
-        >
-          Privacy
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--text-muted)",
-            marginBottom: 6,
-          }}
-        >
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: "var(--text)" }}>Privacy</div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 6 }}>
           Control who can see your information
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "12px 0",
-              borderBottom: "1px solid var(--border-soft)",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 0", borderBottom: "1px solid var(--border-soft)" }}>
             <div>
-              <div
-                style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}
-              >
-                Profile Visibility
-              </div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>Profile Visibility</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                {privacy.profile === "public"
-                  ? "Anyone can view your public profile"
-                  : "Only you can see your profile"}
+                {privacy.profile === "public" ? "Anyone can view your public profile" : "Only you can see your profile"}
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color:
-                    privacy.profile === "public"
-                      ? "var(--green)"
-                      : "var(--text-faint)",
-                }}
-              >
+              <span style={{ fontSize: 12, fontWeight: 700,
+                color: privacy.profile === "public" ? "var(--green)" : "var(--text-faint)" }}>
                 {privacy.profile === "public" ? "Public" : "Private"}
               </span>
-              <ToggleSwitch
-                on={privacy.profile === "public"}
-                onChange={(v) =>
-                  setPrivacy((p) => ({
-                    ...p,
-                    profile: v ? "public" : "private",
-                  }))
-                }
-              />
+              <ToggleSwitch on={privacy.profile === "public"}
+                onChange={v => setPrivacy(p => ({ ...p, profile: v ? "public" : "private" }))} />
             </div>
           </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "12px 0",
-              borderBottom: "1px solid var(--border-soft)",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 0", borderBottom: "1px solid var(--border-soft)" }}>
             <div>
-              <div
-                style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}
-              >
-                Resume Visibility
-              </div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>Resume Visibility</div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                {privacy.resume === "public"
-                  ? "Anyone can download your resume"
-                  : privacy.resume === "recruiters"
-                    ? "Only registered recruiters can view your resume"
-                    : "Your resume is not shared with anyone"}
+                {privacy.resume === "public" ? "Anyone can download your resume"
+                  : privacy.resume === "recruiters" ? "Only registered recruiters can view your resume"
+                  : "Your resume is not shared with anyone"}
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color:
-                    privacy.resume === "private"
-                      ? "var(--text-faint)"
-                      : "var(--green)",
-                }}
-              >
-                {privacy.resume === "public"
-                  ? "Public"
-                  : privacy.resume === "recruiters"
-                    ? "Recruiters"
-                    : "Private"}
+              <span style={{ fontSize: 12, fontWeight: 700,
+                color: privacy.resume === "private" ? "var(--text-faint)" : "var(--green)" }}>
+                {privacy.resume === "public" ? "Public" : privacy.resume === "recruiters" ? "Recruiters" : "Private"}
               </span>
-              <ToggleSwitch
-                on={privacy.resume === "public"}
-                onChange={(v) =>
-                  setPrivacy((p) => ({
-                    ...p,
-                    resume: v ? "public" : "private",
-                  }))
-                }
-              />
+              <ToggleSwitch on={privacy.resume === "public"}
+                onChange={v => setPrivacy(p => ({ ...p, resume: v ? "public" : "private" }))} />
             </div>
           </div>
         </div>
       </div>
-      {/* Appearance */}
+
+      {/* ── Appearance Card ──────────────────────────────────────────── */}
       <div className="card" style={{ padding: 22, marginBottom: 16 }}>
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: 16,
-            marginBottom: 4,
-            color: "var(--text)",
-          }}
-        >
-          Appearance
-        </div>
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--text-muted)",
-            marginBottom: 6,
-          }}
-        >
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4, color: "var(--text)" }}>Appearance</div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 6 }}>
           Personalize how the app looks for you
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "12px 0",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0" }}>
           <div>
-            <div
-              style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}
-            >
-              Dark Mode
-            </div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              Reduce glare with a darker interface
-            </div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>Dark Mode</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Reduce glare with a darker interface</div>
           </div>
           <ToggleSwitch on={darkMode} onChange={setDarkMode} />
         </div>
       </div>
+
       <button className="btn-primary" onClick={saveSettings}>
         <Icon name="check" size={15} /> Save Settings
       </button>
-      {/* Verify modal */}
-      {verifyTarget && (
+
+      {/* ══════════════════════════════════════════════════════════════
+           MODAL 1 — Email Verification (link sent to inbox)
+         ══════════════════════════════════════════════════════════════ */}
+      {showEmailVerify && (
         <>
-          <div className="overlay" onClick={() => setVerifyTarget(null)} />
-          <div
-            className="card"
-            style={{
-              position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              zIndex: 100,
-              width: 370,
-              maxWidth: "90vw",
-              padding: 26,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 6,
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 700,
-                  fontSize: 16,
-                  color: "var(--text)",
-                }}
-              >
-                Verify {verifyTarget === "email" ? "Email" : "Phone"}
-              </div>
-              <button
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
-                }}
-                onClick={() => setVerifyTarget(null)}
-              >
+          <div className="overlay" onClick={() => setShowEmailVerify(false)} />
+          <div className="card" style={{
+            position: "fixed", top: "50%", left: "50%",
+            transform: "translate(-50%,-50%)", zIndex: 100,
+            width: 380, maxWidth: "90vw", padding: 26,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Verify Your Email</div>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
+                onClick={() => setShowEmailVerify(false)}>
                 <Icon name="x" size={18} />
               </button>
             </div>
-            <p
-              style={{
-                fontSize: 13,
-                color: "var(--text-muted)",
-                marginBottom: 12,
-              }}
-            >
-              Enter the 6-digit code sent to{" "}
-              <strong style={{ color: "var(--text)" }}>
-                {verifyTarget === "email" ? account.email : account.phone}
-              </strong>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>
+              A verification link has been sent to{" "}
+              <strong style={{ color: "var(--text)" }}>{account.email}</strong>.
+              Open that email and click the link, then come back here and press the button below.
             </p>
-            <div
-              style={{
-                background: "var(--tint-violet)",
-                color: "var(--violet)",
-                padding: "8px 12px",
-                borderRadius: 10,
-                fontSize: 12,
-                marginBottom: 12,
-                textAlign: "center",
-              }}
-            >
-              Demo mode — your code is <b>{sentCode}</b>
+            <div style={{
+              background: "var(--tint-violet)", color: "var(--violet)",
+              padding: "10px 14px", borderRadius: 10, fontSize: 12, marginBottom: 14, textAlign: "center",
+            }}>
+              📬 Check your inbox (and spam folder) for the verification email
             </div>
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="000000"
-              maxLength={6}
-              inputMode="numeric"
-              autoFocus
-              style={{ textAlign: "center", letterSpacing: 6, fontSize: 18 }}
-            />
-            <div style={{ marginTop: 14 }}>
-              <button
-                className="btn-outline"
-                style={{
-                  width: "100%",
-                  justifyContent: "center",
-                  marginBottom: 8,
-                }}
-                onClick={() => sendCode(verifyTarget)}
-              >
-                Resend Code
-              </button>
-              <button
-                className="btn-primary"
-                style={{ width: "100%", justifyContent: "center" }}
-                onClick={submitCode}
-              >
-                <Icon name="shield" size={15} /> Verify & Continue
-              </button>
-            </div>
+            <button className="btn-outline"
+              style={{ width: "100%", justifyContent: "center", marginBottom: 8 }}
+              onClick={startEmailVerify} disabled={emailVerifyLoading}>
+              {emailVerifyLoading ? "Sending…" : "Resend Verification Email"}
+            </button>
+            <button className="btn-primary"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={checkEmailVerified}>
+              <Icon name="check" size={15} /> I've Verified — Check Now
+            </button>
           </div>
         </>
       )}
 
-      {/* Password modal */}
+      {/* ══════════════════════════════════════════════════════════════
+           MODAL 2 — Change Email (password + new email → Firebase)
+         ══════════════════════════════════════════════════════════════ */}
+      {showEmailChange && (
+        <>
+          <div className="overlay" onClick={() => setShowEmailChange(false)} />
+          <div className="card" style={{
+            position: "fixed", top: "50%", left: "50%",
+            transform: "translate(-50%,-50%)", zIndex: 100,
+            width: 400, maxWidth: "90vw", padding: 26,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
+                {emailChangeStep === "sent" ? "Email Updated ✅" : "Change Email"}
+              </div>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
+                onClick={() => setShowEmailChange(false)}>
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+
+            {emailChangeStep === "password" ? (
+              <>
+                <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>
+                  For security, enter your new email and current password to continue.
+                </p>
+                <div className="form-group" style={{ marginBottom: 12 }}>
+                  <label>New Email Address</label>
+                  <input type="email" value={newEmail}
+                    onChange={e => setNewEmail(e.target.value)} placeholder="new@email.com" />
+                </div>
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <label>Current Password</label>
+                  <input type="password" value={emailChangePw}
+                    onChange={e => setEmailChangePw(e.target.value)}
+                    placeholder="Enter current password" />
+                </div>
+                <button className="btn-primary"
+                  style={{ width: "100%", justifyContent: "center" }}
+                  onClick={confirmEmailChange} disabled={emailLoading}>
+                  <Icon name="shield" size={15} />
+                  {emailLoading ? " Updating…" : " Update & Send Verification"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>
+                  Your email has been changed to{" "}
+                  <strong style={{ color: "var(--text)" }}>{newEmail}</strong>.
+                  A verification link has been sent there — click it to complete verification.
+                </p>
+                <div style={{
+                  background: "var(--tint-green)", color: "var(--green)",
+                  padding: "10px 14px", borderRadius: 10, fontSize: 12, marginBottom: 14, textAlign: "center",
+                }}>
+                  ✅ Email updated — check your new inbox for the verification link
+                </div>
+                <button className="btn-primary"
+                  style={{ width: "100%", justifyContent: "center" }}
+                  onClick={() => setShowEmailChange(false)}>
+                  Done
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════
+           MODAL 3 — Change Password (re-auth → updatePassword)
+         ══════════════════════════════════════════════════════════════ */}
       {showPw && (
         <>
           <div className="overlay" onClick={() => setShowPw(false)} />
-          <div
-            className="card"
-            style={{
-              position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              zIndex: 100,
-              width: 390,
-              maxWidth: "90vw",
-              padding: 26,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 14,
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 700,
-                  fontSize: 16,
-                  color: "var(--text)",
-                }}
-              >
-                Change Password
-              </div>
-              <button
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
-                }}
-                onClick={() => setShowPw(false)}
-              >
+          <div className="card" style={{
+            position: "fixed", top: "50%", left: "50%",
+            transform: "translate(-50%,-50%)", zIndex: 100,
+            width: 390, maxWidth: "90vw", padding: 26,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Change Password</div>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
+                onClick={() => setShowPw(false)}>
                 <Icon name="x" size={18} />
               </button>
             </div>
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label>Current Password</label>
-              <input
-                type="password"
-                value={pw.current}
-                onChange={(e) =>
-                  setPw((p) => ({ ...p, current: e.target.value }))
-                }
-                placeholder="Enter current password"
-              />
+              <input type="password" value={pw.current}
+                onChange={e => setPw(p => ({ ...p, current: e.target.value }))}
+                placeholder="Enter current password" />
             </div>
             <div className="form-group" style={{ marginBottom: 12 }}>
               <label>New Password</label>
-              <input
-                type="password"
-                value={pw.next}
-                onChange={(e) => setPw((p) => ({ ...p, next: e.target.value }))}
-                placeholder="At least 6 characters"
-              />
+              <input type="password" value={pw.next}
+                onChange={e => setPw(p => ({ ...p, next: e.target.value }))}
+                placeholder="At least 6 characters" />
             </div>
             <div className="form-group" style={{ marginBottom: 14 }}>
               <label>Confirm New Password</label>
-              <input
-                type="password"
-                value={pw.confirm}
-                onChange={(e) =>
-                  setPw((p) => ({ ...p, confirm: e.target.value }))
-                }
-                placeholder="Re-enter new password"
-              />
+              <input type="password" value={pw.confirm}
+                onChange={e => setPw(p => ({ ...p, confirm: e.target.value }))}
+                placeholder="Re-enter new password" />
             </div>
-            <button
-              className="btn-primary"
+            <button className="btn-primary"
               style={{ width: "100%", justifyContent: "center" }}
-              onClick={savePassword}
-            >
-              <Icon name="key" size={15} /> Update Password
+              onClick={savePassword} disabled={pwLoading}>
+              <Icon name="key" size={15} />
+              {pwLoading ? " Updating…" : " Update Password"}
             </button>
           </div>
         </>
       )}
-      {/* Email change modal (requires password + OTP verification) */}
-      {showEmailChange && (
+
+      {/* ══════════════════════════════════════════════════════════════
+           MODAL 4 — Phone OTP (Firebase PhoneAuthProvider)
+         ══════════════════════════════════════════════════════════════ */}
+      {showPhoneVerify && (
         <>
-          <div className="overlay" onClick={() => setShowEmailChange(false)} />
-          <div
-            className="card"
-            style={{
-              position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              zIndex: 100,
-              width: 400,
-              maxWidth: "90vw",
-              padding: 26,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 6,
-              }}
-            >
-              <div
-                style={{
-                  fontWeight: 700,
-                  fontSize: 16,
-                  color: "var(--text)",
-                }}
-              >
-                {emailChangeStep === "password"
-                  ? "Change Email"
-                  : "Verify New Email"}
-              </div>
-              <button
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
-                }}
-                onClick={() => setShowEmailChange(false)}
-              >
+          <div className="overlay" onClick={() => setShowPhoneVerify(false)} />
+          <div className="card" style={{
+            position: "fixed", top: "50%", left: "50%",
+            transform: "translate(-50%,-50%)", zIndex: 100,
+            width: 370, maxWidth: "90vw", padding: 26,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Verify Phone Number</div>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}
+                onClick={() => setShowPhoneVerify(false)}>
                 <Icon name="x" size={18} />
               </button>
             </div>
-            <p
-              style={{
-                fontSize: 13,
-                color: "var(--text-muted)",
-                marginBottom: 14,
-              }}
-            >
-              {emailChangeStep === "password"
-                ? "For security, enter your current password to continue."
-                : `Enter the 6-digit code sent to `}
-              {emailChangeStep === "verify" && (
-                <strong style={{ color: "var(--text)" }}>{newEmail}</strong>
-              )}
+            <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+              Enter the 6-digit OTP sent via SMS to{" "}
+              <strong style={{ color: "var(--text)" }}>{account.phone}</strong>
             </p>
-
-            {emailChangeStep === "password" ? (
-              <>
-                <div className="form-group" style={{ marginBottom: 12 }}>
-                  <label>New Email Address</label>
-                  <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="new@email.com"
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 16 }}>
-                  <label>Current Password</label>
-                  <input
-                    type="password"
-                    value={emailChangePw}
-                    onChange={(e) => setEmailChangePw(e.target.value)}
-                    placeholder="Enter current password"
-                  />
-                </div>
-                <button
-                  className="btn-primary"
-                  style={{ width: "100%", justifyContent: "center" }}
-                  onClick={confirmEmailPassword}
-                >
-                  <Icon name="shield" size={15} /> Send Verification Code
-                </button>
-              </>
-            ) : (
-              <>
-                <div
-                  style={{
-                    background: "var(--tint-violet)",
-                    color: "var(--violet)",
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    fontSize: 12,
-                    marginBottom: 12,
-                    textAlign: "center",
-                  }}
-                >
-                  Demo mode — your code is <b>{sentCode}</b>
-                </div>
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="000000"
-                  maxLength={6}
-                  inputMode="numeric"
-                  autoFocus
-                  style={{
-                    textAlign: "center",
-                    letterSpacing: 6,
-                    fontSize: 18,
-                  }}
-                />
-                <div style={{ marginTop: 14 }}>
-                  <button
-                    className="btn-outline"
-                    style={{
-                      width: "100%",
-                      justifyContent: "center",
-                      marginBottom: 8,
-                    }}
-                    onClick={() => {
-                      setEmailChangeStep("password");
-                      setCode("");
-                    }}
-                  >
-                    ← Back
-                  </button>
-                  <button
-                    className="btn-primary"
-                    style={{ width: "100%", justifyContent: "center" }}
-                    onClick={verifyEmailChange}
-                  >
-                    <Icon name="check" size={15} /> Confirm & Update Email
-                  </button>
-                </div>
-              </>
-            )}
+            <input value={phoneOtp}
+              onChange={e => setPhoneOtp(e.target.value)}
+              placeholder="000000" maxLength={6} inputMode="numeric" autoFocus
+              style={{ textAlign: "center", letterSpacing: 6, fontSize: 18 }} />
+            <div style={{ marginTop: 14 }}>
+              <button className="btn-outline"
+                style={{ width: "100%", justifyContent: "center", marginBottom: 8 }}
+                onClick={startPhoneVerify} disabled={phoneLoading}>
+                {phoneLoading ? "Sending…" : "Resend OTP"}
+              </button>
+              <button className="btn-primary"
+                style={{ width: "100%", justifyContent: "center" }}
+                onClick={submitPhoneOtp} disabled={phoneLoading}>
+                <Icon name="shield" size={15} />
+                {phoneLoading ? " Verifying…" : " Verify & Continue"}
+              </button>
+            </div>
           </div>
         </>
       )}
     </div>
   );
 };
+
 
 // ─── EMPLOYER PORTAL ─────────────────────────────────────────────────────────
 const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerApplicants, setEmployerApplicants }) => {
@@ -8068,11 +7461,7 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
                       {s.value}
                     </div>
                     <div
-                      style={{
-                        fontSize: 13,
-                        color: "var(--text-muted)",
-                        marginTop: 2,
-                      }}
+                      style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}
                     >
                       {s.label}
                     </div>
@@ -8111,18 +7500,10 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
               </div>
             ) : (
               employerJobs.slice(0, 5).map((j) => (
-                <div
-                  key={j.id}
-                  style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "12px 0", borderBottom: "1px solid var(--border-soft)",
-                  }}
-                >
+                <div key={j.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid var(--border-soft)" }}>
                   <div>
                     <div style={{ fontWeight: 600, color: "var(--text)", fontSize: 14 }}>{j.title}</div>
-                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                      {j.location} · Posted {j.postedAt}
-                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>{j.location} · Posted {j.postedAt}</div>
                   </div>
                   <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                     <div style={{ textAlign: "center" }}>
@@ -8284,9 +7665,7 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
                   }
                 >
                   <option value="">Select experience</option>
-                  <option value="No Experience (Fresher)">
-                    No Experience (Fresher)
-                  </option>
+                  <option value="No Experience (Fresher)">No Experience (Fresher)</option>
                   <option value="0–1 years">0–1 years</option>
                   <option value="1–3 years">1–3 years</option>
                   <option value="3–5 years">3–5 years</option>
@@ -8367,11 +7746,7 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
                   gap: 10,
                 }}
               >
-                <Icon
-                  name="check"
-                  size={18}
-                  style={{ color: "var(--green)" }}
-                />
+                <Icon name="check" size={18} style={{ color: "var(--green)" }} />
                 <span
                   style={{
                     fontSize: 14,
@@ -8613,27 +7988,19 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
                     <span className={`badge ${j.status === "active" ? "badge-green" : "badge-orange"}`}>
                       {j.status === "active" ? "Active" : "Closed"}
                     </span>
-                    <button
-                      className="btn-ghost"
-                      style={{ padding: "7px 12px" }}
-                      onClick={() => {
-                        setEmployerJobs((prev) => prev.map((job) => job.id === j.id ? { ...job, status: job.status === "active" ? "closed" : "active" } : job));
-                        showToast(j.status === "active" ? "Job closed" : "Job reopened");
-                      }}
-                    >
+                    <button className="btn-ghost" style={{ padding: "7px 12px" }} onClick={() => {
+                      setEmployerJobs((prev) => prev.map((job) => job.id === j.id ? { ...job, status: job.status === "active" ? "closed" : "active" } : job));
+                      showToast(j.status === "active" ? "Job closed" : "Job reopened");
+                    }}>
                       <Icon name={j.status === "active" ? "x" : "check"} size={14} />
                     </button>
-                    <button
-                      className="btn-ghost"
-                      style={{ padding: "7px 12px", color: "var(--red)" }}
-                      onClick={() => {
-                        if (confirm(`Delete "${j.title}"? This cannot be undone.`)) {
-                          setEmployerJobs((prev) => prev.filter((job) => job.id !== j.id));
-                          setEmployerApplicants((prev) => prev.filter((a) => a.jobId !== j.id));
-                          showToast("Job deleted");
-                        }
-                      }}
-                    >
+                    <button className="btn-ghost" style={{ padding: "7px 12px", color: "var(--red)" }} onClick={() => {
+                      if (confirm(`Delete "${j.title}"? This cannot be undone.`)) {
+                        setEmployerJobs((prev) => prev.filter((job) => job.id !== j.id));
+                        setEmployerApplicants((prev) => prev.filter((a) => a.jobId !== j.id));
+                        showToast("Job deleted");
+                      }
+                    }}>
                       <Icon name="trash" size={14} />
                     </button>
                   </div>
@@ -8829,40 +8196,30 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
 };
 
 // ─── AUTH HELPERS ────────────────────────────────────────────────────────────
-// All authentication (Google + Email/Password) is handled by Firebase —
-// see src/firebase.js. The old localStorage accounts & OTP server are removed.
-
-// Turn Firebase auth error codes into friendly messages for the user.
-const friendlyAuthError = (err) => {
-  const code = err?.code || "";
-  const map = {
-    "auth/popup-closed-by-user": "Sign-in popup was closed before completing.",
-    "auth/popup-blocked":
-      "Popup was blocked. Allow popups for this site and try again.",
-    "auth/cancelled-popup-request": "Sign-in was cancelled.",
-    "auth/email-already-in-use":
-      "This email is already registered. Please log in instead.",
-    "auth/invalid-email": "That email address is not valid.",
-    "auth/user-disabled": "This account has been disabled.",
-    "auth/user-not-found": "No account found with this email. Please sign up.",
-    "auth/wrong-password": "Incorrect password. Please try again.",
-    "auth/invalid-credential": "Incorrect email or password. Please try again.",
-    "auth/too-many-requests":
-      "Too many attempts. Please wait a moment and try again.",
-    "auth/weak-password": "Password should be at least 6 characters.",
-    "auth/network-request-failed":
-      "Network error. Check your internet connection.",
-    "auth/operation-not-allowed":
-      "This sign-in method is not enabled. Enable it in Firebase Console → Authentication.",
-    "auth/unauthorized-domain":
-      "This domain is not authorized. Add it in Firebase Console → Authentication → Settings.",
-  };
-  return map[code] || null;
+// Accounts stored in localStorage as cn_accounts: [{email, passwordHash, name, role}]
+const hashPassword = async (pw) => {
+  const buf = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(pw),
+  );
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 };
+const getAccounts = () => {
+  try {
+    return JSON.parse(localStorage.getItem("cn_accounts") || "[]");
+  } catch {
+    return [];
+  }
+};
+const saveAccounts = (arr) =>
+  localStorage.setItem("cn_accounts", JSON.stringify(arr));
+// OTP is now generated server-side via /send-otp endpoint
 
 // ─── AUTH SUB-COMPONENTS (defined outside AuthPage so React never remounts them) ──
 const AuthLogo = () => (
-  <div style={{ textAlign: "center", marginBottom: 24 }}>
+  <div style={{ textAlign: "center", marginBottom: 28 }}>
     <div
       style={{
         width: 48,
@@ -8873,82 +8230,9 @@ const AuthLogo = () => (
         alignItems: "center",
         justifyContent: "center",
         margin: "0 auto 14px",
-        boxShadow: "0 6px 18px rgba(124,58,237,0.35)",
       }}
     >
       <Icon name="lightning" size={22} />
-    </div>
-  </div>
-);
-
-// Left-side brand/marketing panel shown alongside the auth form on desktop
-const AUTH_FEATURES = [
-  { t: "Curated job matches", d: "AI-powered recommendations tailored to your skills." },
-  { t: "Trusted by top employers", d: "Google, Microsoft, Amazon and more hire here." },
-  { t: "Track every application", d: "One dashboard for offers, interviews and saved jobs." },
-];
-const AuthBrandPanel = () => (
-  <div className="auth-brand">
-    <div className="auth-brand-inner">
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 44 }}>
-        <div
-          style={{
-            width: 40, height: 40, borderRadius: 12,
-            background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          <Icon name="lightning" size={20} />
-        </div>
-        <span style={{ fontSize: 20, fontWeight: 800, letterSpacing: -0.3 }}>CareerNova</span>
-      </div>
-      <h2 style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.25, marginBottom: 16 }}>
-        Find work that moves your career forward.
-      </h2>
-      <p style={{ fontSize: 15, color: "rgba(255,255,255,0.72)", lineHeight: 1.7 }}>
-        Join thousands of professionals discovering roles at the world's best companies.
-      </p>
-      <div style={{ marginTop: 30 }}>
-        {AUTH_FEATURES.map((f) => (
-          <div className="auth-brand-feature" key={f.t}>
-            <span className="auth-check">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </span>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{f.t}</div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.62)", lineHeight: 1.5 }}>{f.d}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-);
-
-// Small inline icons used inside form fields
-const FieldGlyph = ({ type }) => {
-  const c = { width: 18, height: 18, fill: "none", stroke: "var(--text-faint)", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", viewBox: "0 0 24 24" };
-  if (type === "user") return (<svg {...c}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>);
-  if (type === "mail") return (<svg {...c}><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></svg>);
-  if (type === "lock") return (<svg {...c}><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>);
-  return null;
-};
-
-// Stable component outside AuthPage – text/email input with a leading icon
-const IconInput = ({ label, icon, type = "text", value, onChange, placeholder }) => (
-  <div className="form-group">
-    <label>{label}</label>
-    <div className="field-icon-wrap">
-      <span><FieldGlyph type={icon} /></span>
-      <input
-        type={type}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ padding: "10px 14px 10px 42px" }}
-      />
     </div>
   </div>
 );
@@ -8980,14 +8264,13 @@ const PasswordInput = ({
 }) => (
   <div className="form-group">
     <label>{label}</label>
-    <div className="field-icon-wrap">
-      <span><FieldGlyph type="lock" /></span>
+    <div style={{ position: "relative" }}>
       <input
         type={show ? "text" : "password"}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={{ padding: "10px 44px 10px 42px" }}
+        style={{ padding: "10px 44px 10px 14px" }}
       />
       <button
         type="button"
@@ -9048,24 +8331,432 @@ const PasswordInput = ({
   </div>
 );
 
-// ─── GOOGLE SIGN-IN (Firebase) ───────────────────────────────────────────────
-// Real Google Sign-In is handled entirely by Firebase Authentication.
+const OtpBox = ({
+  title,
+  sub,
+  otpInput,
+  otpRefs,
+  onOtpKey,
+  onOtpBackspace,
+  error,
+  loading,
+  otpTimer,
+  lockTimer,
+  lockDuration,
+  attemptsLeft,
+  onVerify,
+  onBack,
+  onResend,
+}) => {
+  const isLocked = lockTimer > 0;
+  const isWrong = error && error.startsWith("Incorrect");
 
+  // lockDuration is the duration of the CURRENT or just-ended lock (30, 60, 90 …)
+  // We use it to calculate correct progress-bar width
+  const barTotal = lockDuration || 30;
+
+  const dotBg = (v) =>
+    isLocked ? "var(--tint-red)" : v ? "var(--tint-violet)" : "var(--card)";
+
+  return (
+    <div
+      style={{
+        minHeight: "80vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--auth-bg)",
+        padding: 20,
+      }}
+    >
+      <div
+        className="card"
+        style={{ width: "100%", maxWidth: 440, padding: 36 }}
+      >
+        <AuthLogo />
+
+        {/* ── Header ── */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: 40, marginBottom: 8 }}>
+            {isLocked ? "⏳" : "📩"}
+          </div>
+          <h1 style={{ fontWeight: 800, fontSize: 22, color: "var(--text)" }}>
+            {isLocked ? "Too many attempts" : title}
+          </h1>
+          <p
+            style={{
+              color: "var(--text-faint)",
+              fontSize: 13,
+              marginTop: 6,
+              lineHeight: 1.6,
+            }}
+          >
+            {isLocked ? (
+              <>
+                Wait <strong style={{ color: "#EF4444" }}>{lockTimer}s</strong>{" "}
+                before trying again.
+              </>
+            ) : (
+              sub
+            )}
+          </p>
+        </div>
+
+        {/* ── OTP input boxes ── */}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "center",
+            marginBottom: 12,
+          }}
+        >
+          {otpInput.map((v, i) => (
+            <input
+              key={i}
+              ref={otpRefs[i]}
+              maxLength={1}
+              value={v}
+              onChange={(e) => !isLocked && onOtpKey(i, e.target.value)}
+              onKeyDown={(e) => !isLocked && onOtpBackspace(i, e)}
+              disabled={isLocked}
+              style={{
+                width: 46,
+                height: 54,
+                borderRadius: 12,
+                border: `2px solid ${isLocked ? "var(--red)" : isWrong ? "#EF4444" : v ? "var(--violet)" : "var(--border)"}`,
+                textAlign: "center",
+                fontSize: 22,
+                fontWeight: 700,
+                outline: "none",
+                background: dotBg(v),
+                color: isLocked ? "#EF4444" : "var(--text)",
+                transition: "border 0.2s, background 0.2s",
+                cursor: isLocked ? "not-allowed" : "text",
+              }}
+            />
+          ))}
+        </div>
+
+        {/* ── Attempt indicator (shown when NOT locked) ── */}
+        {!isLocked && attemptsLeft !== null && attemptsLeft < 3 && (
+          <p
+            style={{
+              textAlign: "center",
+              fontSize: 12,
+              color: attemptsLeft === 1 ? "#EF4444" : "var(--amber)",
+              marginBottom: 14,
+              fontWeight: 600,
+            }}
+          >
+            {attemptsLeft} attempt{attemptsLeft === 1 ? "" : "s"} remaining
+          </p>
+        )}
+
+        {/* ── Lock countdown UI (shown when locked) ── */}
+        {isLocked && (
+          <div style={{ marginBottom: 18 }}>
+            {/* Simple countdown + progress bar */}
+            <div style={{ textAlign: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 28, fontWeight: 800, color: "#EF4444" }}>
+                {lockTimer}
+              </span>
+              <span style={{ fontSize: 13, color: "var(--text-faint)", marginLeft: 4 }}>
+                seconds
+              </span>
+            </div>
+            <div
+              style={{
+                height: 5,
+                background: "var(--tint-red)",
+                borderRadius: 99,
+                overflow: "hidden",
+                marginBottom: 12,
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  background: "#EF4444",
+                  borderRadius: 99,
+                  width: `${(lockTimer / barTotal) * 100}%`,
+                  transition: "width 1s linear",
+                }}
+              />
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-faint)", textAlign: "center" }}>
+              Too many wrong attempts. Please wait before trying again.
+            </p>
+          </div>
+        )}
+
+        <ErrBox error={error} />
+
+        {/* ── Verify / locked button ── */}
+        <button
+          className="btn-primary"
+          style={{
+            width: "100%",
+            justifyContent: "center",
+            padding: 13,
+            fontSize: 15,
+            marginTop: 8,
+            opacity: loading || isLocked ? 0.55 : 1,
+            cursor: isLocked ? "not-allowed" : "pointer",
+            background: isLocked
+              ? "linear-gradient(135deg,#EF4444,#F87171)"
+              : undefined,
+          }}
+          onClick={onVerify}
+          disabled={loading || isLocked}
+        >
+          {loading
+            ? "Verifying…"
+            : isLocked
+              ? `Wait ${lockTimer}s`
+              : "Verify OTP"}
+        </button>
+
+        {/* ── Footer: back + resend ── */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: 14,
+            fontSize: 13,
+          }}
+        >
+          <button
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-faint)",
+              cursor: "pointer",
+            }}
+            onClick={onBack}
+          >
+            ← Back
+          </button>
+          {otpTimer > 0 || isLocked ? (
+            <span style={{ color: "var(--text-faint)" }}>
+              Resend in {isLocked ? lockTimer : otpTimer}s
+            </span>
+          ) : (
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                color: "#7C3AED",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+              onClick={onResend}
+            >
+              Resend OTP
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── GOOGLE SIGN-IN ─────────────────────────────────────────────────────────
+// Demo Google accounts shown when no real GOOGLE_CLIENT_ID is configured.
+const DEMO_GOOGLE_ACCOUNTS = [
+  { name: "Aarav Sharma", email: "aarav.sharma@gmail.com", color: "#4285F4" },
+  { name: "Priya Patel", email: "priya.patel@gmail.com", color: "#EA4335" },
+  { name: "Rahul Verma", email: "rahul.verma@gmail.com", color: "#FBBC05" },
+  { name: "Sneha Iyer", email: "sneha.iyer@gmail.com", color: "#34A853" },
+];
+
+// Google account chooser modal (used when GOOGLE_CLIENT_ID is empty).
+const GoogleDemoModal = ({ onSelect, onClose }) => {
+  const [customName, setCustomName] = useState("");
+  const [customEmail, setCustomEmail] = useState("");
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.55)",
+        zIndex: 200,
+        backdropFilter: "blur(3px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        style={{ width: "100%", maxWidth: 400, padding: 24 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 18,
+          }}
+        >
+          <GoogleIcon size={28} />
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: 18,
+              marginLeft: 8,
+              color: "var(--text)",
+            }}
+          >
+            Sign in with Google
+          </span>
+        </div>
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--text-muted)",
+            textAlign: "center",
+            marginBottom: 18,
+            lineHeight: 1.5,
+          }}
+        >
+          Choose a demo account (or add your own) to continue with Google.
+          <br />
+          <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+            Tip: paste your real Google OAuth Client ID in App.jsx to use
+            actual Google accounts.
+          </span>
+        </p>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            marginBottom: 18,
+          }}
+        >
+          {DEMO_GOOGLE_ACCOUNTS.map((a) => (
+            <button
+              key={a.email}
+              onClick={() => onSelect({ name: a.name, email: a.email })}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                background: "var(--card)",
+                cursor: "pointer",
+                textAlign: "left",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.borderColor = "#7C3AED")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.borderColor = "var(--border)")
+              }
+            >
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  background: a.color,
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  flexShrink: 0,
+                }}
+              >
+                {a.name
+                  .split(" ")
+                  .map((p) => p[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase()}
+              </div>
+              <div>
+                <div
+                  style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}
+                >
+                  {a.name}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                  {a.email}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="form-group" style={{ marginBottom: 12 }}>
+          <label>Or use another account</label>
+          <input
+            placeholder="Full name"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+          />
+          <input
+            type="email"
+            placeholder="you@gmail.com"
+            value={customEmail}
+            onChange={(e) => setCustomEmail(e.target.value)}
+          />
+        </div>
+        <button
+          className="btn-primary"
+          style={{ width: "100%", justifyContent: "center" }}
+          disabled={!customName.trim() || !customEmail.includes("@")}
+          onClick={() =>
+            onSelect({ name: customName.trim(), email: customEmail.trim() })
+          }
+        >
+          <GoogleIcon size={16} /> Continue with Google
+        </button>
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%",
+            background: "none",
+            border: "none",
+            color: "var(--text-muted)",
+            fontWeight: 600,
+            fontSize: 13,
+            cursor: "pointer",
+            marginTop: 12,
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// The "Continue with Google" button shown on login / signup forms.
+// ─── GoogleButton — uses Firebase signInWithGoogle ────────────────────────────
 const GoogleButton = ({ onLogin }) => {
   const [busy, setBusy] = useState(false);
   const { showToast } = useContext(AppContext);
 
   const handleClick = async () => {
-    if (busy) return;
     setBusy(true);
     try {
-      const u = await signInWithGoogle();
-      onLogin(u);
+      const user = await signInWithGoogle();
+      onLogin(user);
     } catch (err) {
-      showToast(
-        friendlyAuthError(err) || "Google sign-in failed. Please try again.",
-        "error",
-      );
+      // user closed the popup — don't show an error
+      if (err.code !== "auth/popup-closed-by-user" && err.code !== "auth/cancelled-popup-request") {
+        showToast(err.message || "Google sign-in failed.", "error");
+      }
     } finally {
       setBusy(false);
     }
@@ -9074,104 +8765,136 @@ const GoogleButton = ({ onLogin }) => {
   return (
     <button className="google-btn" onClick={handleClick} disabled={busy}>
       <GoogleIcon size={18} />
-      {busy ? "Signing in…" : "Continue with Google"}
+      {busy ? "Opening Google…" : "Continue with Google"}
     </button>
   );
 };
 
-// ─── OTP BOX ────────────────────────────────────────────────────────────────
-const OtpBox = ({
-  title, sub, otpInput, otpRefs, onOtpKey, onOtpBackspace,
-  error, loading, otpTimer, lockTimer, lockDuration, attemptsLeft,
-  onVerify, onBack, onResend,
-}) => {
-  const isLocked = lockTimer > 0;
-  const isWrong = error && error.startsWith("Incorrect");
-  const barTotal = lockDuration || 30;
-  const dotBg = (v) => isLocked ? "var(--tint-red)" : v ? "var(--tint-violet)" : "var(--card)";
-  return (
-    <div className="auth-shell">
-      <AuthBrandPanel />
-      <div className="auth-form-side">
-      <div className="auth-card">
-        <AuthLogo />
-        <div style={{ textAlign:"center", marginBottom:24 }}>
-          <div style={{ fontSize:40, marginBottom:8 }}>{isLocked ? "⏳" : "📩"}</div>
-          <h1 style={{ fontWeight:800, fontSize:22, color:"var(--text)" }}>{isLocked ? "Too many attempts" : title}</h1>
-          <p style={{ color:"var(--text-faint)", fontSize:13, marginTop:6, lineHeight:1.6 }}>
-            {isLocked ? <>Wait <strong style={{ color:"#EF4444" }}>{lockTimer}s</strong> before trying again.</> : sub}
-          </p>
-        </div>
-        <div style={{ display:"flex", gap:8, justifyContent:"center", marginBottom:12 }}>
-          {otpInput.map((v, i) => (
-            <input key={i} ref={otpRefs[i]} maxLength={1} value={v}
-              onChange={(e) => !isLocked && onOtpKey(i, e.target.value)}
-              onKeyDown={(e) => !isLocked && onOtpBackspace(i, e)}
-              disabled={isLocked}
-              style={{ width:46, height:54, borderRadius:12, border:`2px solid ${isLocked?"var(--red)":isWrong?"#EF4444":v?"var(--violet)":"var(--border)"}`,
-                textAlign:"center", fontSize:22, fontWeight:700, outline:"none", background:dotBg(v),
-                color:isLocked?"#EF4444":"var(--text)", transition:"border 0.2s, background 0.2s", cursor:isLocked?"not-allowed":"text" }}
-            />
-          ))}
-        </div>
-        {!isLocked && attemptsLeft !== null && attemptsLeft < 3 && (
-          <p style={{ textAlign:"center", fontSize:12, color:attemptsLeft===1?"#EF4444":"var(--amber)", marginBottom:14, fontWeight:600 }}>
-            {attemptsLeft} attempt{attemptsLeft===1?"":"s"} remaining
-          </p>
-        )}
-        {isLocked && (
-          <div style={{ marginBottom:18 }}>
-            <div style={{ textAlign:"center", marginBottom:12 }}>
-              <span style={{ fontSize:28, fontWeight:800, color:"#EF4444" }}>{lockTimer}</span>
-              <span style={{ fontSize:13, color:"var(--text-faint)", marginLeft:4 }}>seconds</span>
-            </div>
-            <div style={{ height:5, background:"var(--tint-red)", borderRadius:99, overflow:"hidden", marginBottom:12 }}>
-              <div style={{ height:"100%", background:"#EF4444", borderRadius:99, width:`${(lockTimer/barTotal)*100}%`, transition:"width 1s linear" }} />
-            </div>
-            <p style={{ fontSize:12, color:"var(--text-faint)", textAlign:"center" }}>Too many wrong attempts. Please wait before trying again.</p>
-          </div>
-        )}
-        <ErrBox error={error} />
-        <button className="btn-primary"
-          style={{ width:"100%", justifyContent:"center", padding:13, fontSize:15, marginTop:8, opacity:loading||isLocked?0.55:1, cursor:isLocked?"not-allowed":"pointer",
-            background:isLocked?"linear-gradient(135deg,#EF4444,#F87171)":undefined }}
-          onClick={onVerify} disabled={loading||isLocked}>
-          {loading ? "Verifying…" : isLocked ? `Wait ${lockTimer}s` : "Verify OTP"}
-        </button>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:14, fontSize:13 }}>
-          <button style={{ background:"none", border:"none", color:"var(--text-faint)", cursor:"pointer" }} onClick={onBack}>← Back</button>
-          {otpTimer > 0 || isLocked ? (
-            <span style={{ color:"var(--text-faint)" }}>Resend in {isLocked ? lockTimer : otpTimer}s</span>
-          ) : (
-            <button style={{ background:"none", border:"none", color:"#7C3AED", fontWeight:600, cursor:"pointer" }} onClick={onResend}>Resend OTP</button>
-          )}
-        </div>
+const ProfileSetupJSX = ({ form, updateForm, strength, skills, newSkill, setNewSkill, addSkill, removeSkill, experience, newExp, setNewExp, addExperience, removeExperience, handleSave, handleSkip }) => (
+  <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px 60px" }}>
+    <div style={{ textAlign: "center", marginBottom: 24 }}>
+      <h1 style={{ fontWeight: 800, fontSize: 24, color: "var(--text)" }}>Build your profile strength</h1>
+      <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 6 }}>Take a minute to complete your profile. You can skip and do this later.</p>
+    </div>
+    <div className="card" style={{ padding: 22, marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, color: "var(--text)" }}>Profile Strength</div>
+        <span style={{ fontWeight: 700, color: "#7C3AED", fontSize: 18 }}>{strength}%</span>
       </div>
+      <div className="progress-bar"><div className="progress-fill" style={{ width: `${strength}%` }} /></div>
+    </div>
+    <div className="card" style={{ padding: 24 }}>
+      <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", marginBottom: 14 }}>Basic Info</div>
+      <div className="grid-2">
+        <div className="form-group"><label>Full Name</label><input value={form.name} onChange={(e) => updateForm("name", e.target.value)} /></div>
+        <div className="form-group"><label>Professional Headline</label><input value={form.headline} onChange={(e) => updateForm("headline", e.target.value)} placeholder="e.g. Full Stack Developer" /></div>
+        <div className="form-group"><label>Location</label><input value={form.location} onChange={(e) => updateForm("location", e.target.value)} placeholder="e.g. Bengaluru, India" /></div>
+        <div className="form-group"><label>Email</label><input value={form.email} disabled /></div>
+      </div>
+      <div className="form-group" style={{ marginTop: 12 }}><label>About</label><textarea value={form.about} onChange={(e) => updateForm("about", e.target.value)} placeholder="Short professional summary" rows={3} /></div>
+    </div>
+    <div className="card" style={{ padding: 24, marginTop: 20 }}>
+      <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", marginBottom: 14 }}>Skills</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        {skills.map((s) => (<span key={s} className="tag">{s}<button onClick={() => removeSkill(s)} style={{ background: "none", border: "none", cursor: "pointer", color: "#7C3AED", marginLeft: 4, padding: 0, fontSize: 12 }}>×</button></span>))}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }} placeholder="Add a skill" style={{ padding: "6px 10px", borderRadius: 8, border: "1.5px solid var(--border)", fontSize: 12, width: 140, outline: "none", background: "var(--card)", color: "var(--text)" }} />
+          <button className="btn-ghost" style={{ padding: "6px 12px", fontSize: 12 }} onClick={addSkill}><Icon name="plus" size={12} /> Add</button>
+        </div>
       </div>
     </div>
-  );
-};
+    <div className="card" style={{ padding: 24, marginTop: 20 }}>
+      <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", marginBottom: 14 }}>Experience</div>
+      {experience.length === 0 ? (<p style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 12 }}>No experience added yet. Add your work history below.</p>) : null}
+      {experience.map((e, i) => (
+        <div key={i} style={{ display: "flex", gap: 14, paddingBottom: 16, borderBottom: i < experience.length - 1 ? "1px solid var(--border-soft)" : "none", marginBottom: i < experience.length - 1 ? 16 : 0 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--tint-violet)", display: "flex", alignItems: "center", justifyContent: "center", color: "#7C3AED", flexShrink: 0 }}><Icon name="briefcase" size={16} /></div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: "var(--text)" }}>{e.role}</div>
+            <div style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600 }}>{e.company}</div>
+            <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>{e.period}</div>
+            {e.desc && <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{e.desc}</div>}
+          </div>
+          <button onClick={() => removeExperience(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", fontSize: 18, alignSelf: "flex-start", padding: 0 }}>×</button>
+        </div>
+      ))}
+      <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div className="form-group"><label>Role / Title</label><input value={newExp.role} onChange={(e) => setNewExp((p) => ({ ...p, role: e.target.value }))} placeholder="e.g. Frontend Developer" /></div>
+        <div className="form-group"><label>Company</label><input value={newExp.company} onChange={(e) => setNewExp((p) => ({ ...p, company: e.target.value }))} placeholder="e.g. Tech Corp" /></div>
+        <div className="form-group"><label>Period</label><input value={newExp.period} onChange={(e) => setNewExp((p) => ({ ...p, period: e.target.value }))} placeholder="e.g. 2022 – Present" /></div>
+        <div className="form-group"><label>Description</label><input value={newExp.desc} onChange={(e) => setNewExp((p) => ({ ...p, desc: e.target.value }))} placeholder="Brief description" /></div>
+      </div>
+      <button className="btn-ghost" style={{ marginTop: 4 }} onClick={addExperience}><Icon name="plus" size={13} /> Add Experience</button>
+    </div>
+    <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 20 }}>
+      <button className="btn-ghost" style={{ padding: "12px 24px" }} onClick={handleSkip}>Skip for now</button>
+      <button className="btn-primary" style={{ padding: "12px 24px" }} onClick={handleSave}><Icon name="check" size={15} /> Save & Continue</button>
+    </div>
+  </div>
+);
+
+const ProfileSetupPage = ({ user, setPage, profile, setProfile, showToast }) => {
+  const [form, setForm] = useState({
+    name: user?.name || profile?.form?.name || "",
+    headline: profile?.form?.headline || "",
+    location: profile?.form?.location || "",
+    about: profile?.form?.about || "",
+    email: user?.email || profile?.form?.email || "",
+  });
+  const [skills, setSkills] = useState(profile?.skills || []);
+  const [experience, setExperience] = useState(profile?.experience || []);
+  const [newSkill, setNewSkill] = useState("");
+  const [newExp, setNewExp] = useState({ role: "", company: "", period: "", desc: "" });
+  const strength = computeProfileStrength({ form, skills, experience });
+  const updateForm = (key, value) => setForm((p) => ({ ...p, [key]: value }));
+  const addSkill = () => { const s = newSkill.trim(); if (!s) return; setSkills((p) => (p.includes(s) ? p : [...p, s])); setNewSkill(""); };
+  const removeSkill = (s) => setSkills((p) => p.filter((x) => x !== s));
+  const addExperience = () => {
+    if (!newExp.role.trim() || !newExp.company.trim()) return;
+    setExperience((p) => [...p, { ...newExp, role: newExp.role.trim(), company: newExp.company.trim() }]);
+    setNewExp({ role: "", company: "", period: "", desc: "" });
+  };
+  const removeExperience = (i) => setExperience((p) => p.filter((_, idx) => idx !== i));
+  const handleSave = () => {
+    const pd = { form: { ...form, email: user?.email || form.email }, skills, experience };
+    setProfile(pd);
+    try { localStorage.setItem("cn_profile", JSON.stringify(pd)); } catch {}
+    showToast("Profile created! 🎉");
+    setPage("dashboard");
+  };
+  const handleSkip = () => {
+    // Save the current (mostly empty) profile so we don't fall back to defaults
+    setProfile({ form, skills, experience });
+    try { localStorage.setItem("cn_profile", JSON.stringify({ form, skills, experience })); } catch {}
+    setPage("dashboard");
+  };
+
+  return ProfileSetupJSX({ form, updateForm, strength, skills, newSkill, setNewSkill, addSkill, removeSkill, experience, newExp, setNewExp, addExperience, removeExperience, handleSave, handleSkip });
+}; // ProfileSetupPage
 
 // ─── AUTH PAGES ──────────────────────────────────────────────────────────────
 const AuthPage = ({ mode, setPage, setUser }) => {
-  // step: "form" | "otp" | "forgot"
+  // step: "form" | "otp" | "forgot" | "reset"
   const [step, setStep] = useState("form");
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     confirm: "",
+    role: "seeker",
   });
-  const [forgotEmail, setForgotEmail] = useState("");
+  const [otpInput, setOtpInput] = useState(["", "", "", "", "", ""]);
+  // generatedOtp removed — OTP is stored server-side only
+  const [otpEmail, setOtpEmail] = useState(""); // for forgot-password flow
+  const [resetPassword, setResetPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [otpInput, setOtpInput] = useState(["", "", "", "", "", ""]);
   const [otpTimer, setOtpTimer] = useState(60);
-  const [otpAttempts, setOtpAttempts] = useState(0);
-  const [lockTimer, setLockTimer] = useState(0);
-  const [lockDuration, setLockDuration] = useState(30);
+  const [otpAttempts, setOtpAttempts] = useState(0); // wrong guesses so far (max 3)
+  const [lockTimer, setLockTimer] = useState(0); // seconds left in lockout
+  const [lockDuration, setLockDuration] = useState(30); // grows by 30s each lockout
   const timerRef = useRef(null);
   const lockRef = useRef(null);
   const otpRefs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
@@ -9182,52 +8905,81 @@ const AuthPage = ({ mode, setPage, setUser }) => {
     setError("");
   };
 
-  // ── OTP countdown timer ──────────────────────────────────────────────
+  // OTP countdown timer
   useEffect(() => {
     if (step === "otp") {
       setOtpTimer(60);
       timerRef.current = setInterval(
-        () => setOtpTimer((t) => { if (t <= 1) { clearInterval(timerRef.current); return 0; } return t - 1; }),
+        () =>
+          setOtpTimer((t) => {
+            if (t <= 1) {
+              clearInterval(timerRef.current);
+              return 0;
+            }
+            return t - 1;
+          }),
         1000,
       );
     }
     return () => clearInterval(timerRef.current);
   }, [step]);
 
-  // OTP input handlers
+  // OTP box: type a digit and auto-advance
   const handleOtpKey = (i, val) => {
     if (!/^[0-9]?$/.test(val)) return;
-    const next = [...otpInput]; next[i] = val; setOtpInput(next);
+    const next = [...otpInput];
+    next[i] = val;
+    setOtpInput(next);
     if (val && i < 5) otpRefs[i + 1].current?.focus();
   };
   const handleOtpBackspace = (i, e) => {
-    if (e.key === "Backspace" && !otpInput[i] && i > 0) otpRefs[i - 1].current?.focus();
+    if (e.key === "Backspace" && !otpInput[i] && i > 0)
+      otpRefs[i - 1].current?.focus();
   };
 
-  // Lockout timer
+  // Start a lockout of `secs` seconds; each call increments lockDuration by 30
   const startLock = (secs) => {
     clearInterval(lockRef.current);
     setLockTimer(secs);
     lockRef.current = setInterval(() => {
-      setLockTimer((t) => { if (t <= 1) { clearInterval(lockRef.current); return 0; } return t - 1; });
+      setLockTimer((t) => {
+        if (t <= 1) {
+          clearInterval(lockRef.current);
+          return 0;
+        }
+        return t - 1;
+      });
     }, 1000);
   };
 
-  // Resend OTP
   const resendOtp = async () => {
     setOtpInput(["", "", "", "", "", ""]);
-    setOtpAttempts(0); setLockTimer(0); setLockDuration(30);
+    setOtpAttempts(0);
+    setLockTimer(0);
+    setLockDuration(30);
     clearInterval(lockRef.current);
-    setOtpTimer(60); clearInterval(timerRef.current);
+    setOtpTimer(60);
+    clearInterval(timerRef.current);
     timerRef.current = setInterval(
-      () => setOtpTimer((t) => { if (t <= 1) { clearInterval(timerRef.current); return 0; } return t - 1; }),
+      () =>
+        setOtpTimer((t) => {
+          if (t <= 1) {
+            clearInterval(timerRef.current);
+            return 0;
+          }
+          return t - 1;
+        }),
       1000,
     );
     setError("");
     try {
+      const purpose = step === "reset" ? "reset" : "signup";
+      const email = step === "reset" ? otpEmail : form.email;
+      const name = step === "reset" ? "" : form.name;
       const res = await fetch("http://localhost:4000/send-otp", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.email, name: form.name, purpose: "signup" }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name, purpose }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Failed");
@@ -9237,30 +8989,12 @@ const AuthPage = ({ mode, setPage, setUser }) => {
     }
   };
 
-  // ── Google Sign-In (Firebase) ─────────────────────────────────────────────
-  const handleGoogleLogin = (googleUser) => {
-    setUser({
-      name: googleUser.name || googleUser.email.split("@")[0],
-      email: googleUser.email.toLowerCase(),
-      role: "Job Seeker",
-      picture: googleUser.photo || "",
-    });
-    showToast(`Welcome, ${googleUser.name || googleUser.email.split("@")[0]}! 🎉`);
-    // If coming from signup page and setup not done yet, show onboarding
-    const setupDone = localStorage.getItem("cn_profile_setup_done");
-    if (!setupDone && mode === "signup") {
-      localStorage.removeItem("cn_profile_setup_done");
-      setPage("profile-setup");
-    } else {
-      setPage("dashboard");
-    }
-  };
-
-  // ── Sign up step 1: validate & send OTP via server ───────────────────
+  // ── Sign-up: step 1 – validate form, send real OTP via server ──────────────
+  // ── Sign-up: Firebase email+password ─────────────────────────────────────
   const handleSignupSubmit = async () => {
-    if (!form.name.trim()) { setError("Full name is required."); return; }
-    if (!form.email.includes("@")) { setError("Enter a valid email address."); return; }
-    if (form.password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (!form.name.trim())           { setError("Full name is required."); return; }
+    if (!form.email.includes("@"))   { setError("Enter a valid email address."); return; }
+    if (form.password.length < 6)    { setError("Password must be at least 6 characters."); return; }
     if (form.password !== form.confirm) { setError("Passwords do not match."); return; }
     setLoading(true);
     setError("");
@@ -9268,23 +9002,26 @@ const AuthPage = ({ mode, setPage, setUser }) => {
       const res = await fetch("http://localhost:4000/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.email, name: form.name, purpose: "signup" }),
+        body: JSON.stringify({ email: form.email, name: form.name.trim(), purpose: "signup" }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to send OTP");
-      showToast("OTP sent! Check your inbox. 📧");
-      setLoading(false);
+      showToast("OTP sent! Check your email inbox.", "success");
       setStep("otp");
     } catch (err) {
+      setError(err.message || "Could not send OTP. Make sure the OTP server is running on port 4000.");
+    } finally {
       setLoading(false);
-      setError(err.message || "Could not send OTP. Is the server running on port 4000?");
     }
   };
 
-  // ── Sign up step 2: verify OTP, then create Firebase account ─────────
+  // ── Sign-up: step 2 – verify OTP on server, then create Firebase account ──────────────
   const handleOtpVerify = async () => {
     const entered = otpInput.join("");
-    if (entered.length < 6) { setError("Enter the 6-digit OTP."); return; }
+    if (entered.length < 6) {
+      setError("Enter the 6-digit OTP.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -9302,6 +9039,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
         } else if (data.reason === "not_found") {
           setError("OTP not found. Please request a new one.");
         } else {
+          // wrong — apply local attempt logic for UI feedback
           const newAttempts = otpAttempts + 1;
           setOtpAttempts(newAttempts);
           if (newAttempts >= 3) {
@@ -9309,68 +9047,185 @@ const AuthPage = ({ mode, setPage, setUser }) => {
             setLockDuration((d) => d + 30);
             startLock(dur);
             setOtpAttempts(0);
-            setError(`Too many wrong attempts. Wait ${dur}s before trying again.`);
+            setError(
+              `Too many wrong attempts. Wait ${dur}s before trying again.`,
+            );
           } else {
-            setError(`Incorrect OTP. ${3 - newAttempts} attempt${3 - newAttempts === 1 ? "" : "s"} left.`);
+            setError(
+              `Incorrect OTP. ${3 - newAttempts} attempt${3 - newAttempts === 1 ? "" : "s"} left.`,
+            );
             setTimeout(() => otpRefs[0].current?.focus(), 0);
           }
         }
         return;
       }
-      // OTP verified ✓ — create Firebase account
-      const u = await signUpWithEmail(form.name.trim(), form.email.trim(), form.password);
-      setUser({ name: u.name, email: u.email, role: "Job Seeker", picture: "" });
+      // OTP verified ✓ — create the Firebase account (both Job Seeker & Employer)
+      const user = await signUpWithEmail(form.name.trim(), form.email, form.password);
+      setLoading(false);
+      setUser({
+        name: user.name,
+        email: user.email,
+        role: form.role === "employer" ? "Employer" : "Job Seeker",
+      });
       showToast("Account created! Welcome to CareerNova 🎉");
-      localStorage.removeItem("cn_profile_setup_done");
       setPage("profile-setup");
     } catch (err) {
       setLoading(false);
-      setError(friendlyAuthError(err) || "Sign-up failed. Please try again.");
+      if (err.code === "auth/email-already-in-use") {
+        setError("This email is already registered. Please log in.");
+      } else if (err.code === "auth/invalid-email") {
+        setError("Invalid email address.");
+      } else if (err.code === "auth/weak-password") {
+        setError("Password is too weak. Use at least 6 characters.");
+      } else {
+        setError(err.message || "Sign-up failed. Please try again.");
+      }
     }
   };
 
-  // ── Login with email + password (Firebase) ────────────────────────────────
+  // ── Login: Firebase email+password ──────────────────────────────────────
   const handleLoginSubmit = async () => {
-    if (!form.email || !form.password) {
-      setError("Please fill in all fields.");
-      return;
-    }
+    if (!form.email || !form.password) { setError("Please fill in all fields."); return; }
     setLoading(true);
     setError("");
     try {
-      const u = await signInWithEmail(form.email.trim(), form.password);
-      const name = u.name || u.email.split("@")[0];
-      setUser({ name, email: u.email, role: "Job Seeker", picture: "" });
-      showToast(`Welcome back, ${name}! 👋`);
+      const user = await signInWithEmail(form.email, form.password);
+      setUser({ name: user.name || form.email.split("@")[0], email: user.email, role: "Job Seeker" });
+      showToast(`Welcome back, ${user.name || "there"}! 👋`);
       setPage("dashboard");
     } catch (err) {
-      setError(friendlyAuthError(err) || "Login failed. Please try again.");
-    } finally {
       setLoading(false);
+      if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+        setError("No account found with this email.");
+      } else if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+        setError("Incorrect password. Please try again.");
+      } else if (err.code === "auth/too-many-requests") {
+        setError("Too many failed attempts. Try again later or reset your password.");
+      } else {
+        setError(err.message || "Login failed. Please try again.");
+      }
     }
   };
 
-  // ── Forgot password (Firebase sends a reset email) ────────────────────────
+  // ── Google Sign-In (Firebase) ────────────────────────────────────────────
+  const handleGoogleLogin = (googleUser) => {
+    setUser({
+      name: googleUser.name || googleUser.email.split("@")[0],
+      email: googleUser.email,
+      role: form.role === "employer" ? "Employer" : "Job Seeker",
+      photo: googleUser.photo || "",
+    });
+    showToast(`Welcome, ${googleUser.name || googleUser.email.split("@")[0]}! 🎉`);
+    setPage("profile-setup");
+  };
+
+  // ── Forgot password: send OTP via server ─────────────────────────────────
+  // ── Forgot password: Firebase sends reset link directly ─────────────────
   const handleForgotSend = async () => {
-    if (!forgotEmail.includes("@")) {
-      setError("Enter a valid email address.");
+    if (!otpEmail.includes("@")) { setError("Enter a valid email address."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      await resetPasswordEmail(otpEmail);
+      setLoading(false);
+      setStep("reset-sent");
+      showToast("Password reset email sent! Check your inbox 📧");
+    } catch (err) {
+      setLoading(false);
+      if (err.code === "auth/user-not-found") {
+        setError("No account found with this email.");
+      } else {
+        setError(err.message || "Could not send reset email. Try again.");
+      }
+    }
+  };
+
+  // ── Forgot password: verify OTP + set new password ────────────────────────
+  const handleResetSubmit = async () => {
+    const entered = otpInput.join("");
+    if (entered.length < 6) {
+      setError("Enter the 6-digit OTP.");
+      return;
+    }
+    if (resetPassword.length < 6) {
+      setError("New password must be at least 6 characters.");
       return;
     }
     setLoading(true);
     setError("");
+    let verified = false;
     try {
-      await resetPasswordEmail(forgotEmail.trim());
-      showToast("Password reset link sent! Check your inbox 📧");
-      setStep("form");
-      setForgotEmail("");
+      const res = await fetch("http://localhost:4000/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: otpEmail, otp: entered }),
+      });
+      const data = await res.json();
+      if (!data.valid) {
+        setLoading(false);
+        setOtpInput(["", "", "", "", "", ""]);
+        if (data.reason === "expired") {
+          setError("OTP has expired. Please request a new one.");
+        } else {
+          const newAttempts = otpAttempts + 1;
+          setOtpAttempts(newAttempts);
+          if (newAttempts >= 3) {
+            const dur = lockDuration;
+            setLockDuration((d) => d + 30);
+            startLock(dur);
+            setOtpAttempts(0);
+            setError(
+              `Too many wrong attempts. Wait ${dur}s before trying again.`,
+            );
+          } else {
+            setError(
+              `Incorrect OTP. ${3 - newAttempts} attempt${3 - newAttempts === 1 ? "" : "s"} left.`,
+            );
+            setTimeout(() => otpRefs[0].current?.focus(), 0);
+          }
+        }
+        return;
+      }
+      verified = true;
     } catch (err) {
-      setError(
-        friendlyAuthError(err) || "Could not send reset email. Try again.",
-      );
-    } finally {
       setLoading(false);
+      setError(
+        "Server error. Make sure the OTP server is running on port 4000.",
+      );
+      return;
     }
+    if (!verified) return;
+    const hash = await hashPassword(resetPassword);
+    const accounts = getAccounts();
+    const idx = accounts.findIndex(
+      (a) => a.email.toLowerCase() === otpEmail.toLowerCase(),
+    );
+    if (idx !== -1) {
+      accounts[idx].passwordHash = hash;
+      saveAccounts(accounts);
+    }
+    showToast("Password reset successful! Please log in.");
+    setStep("form");
+    setOtpEmail("");
+    setResetPassword("");
+    setOtpInput(["", "", "", "", "", ""]);
+    setOtpAttempts(0);
+    setLockTimer(0);
+    setLockDuration(30);
+    setForm({ name: "", email: "", password: "", confirm: "", role: "seeker" });
   };
+
+  // ── Shared styles ─────────────────────────────────────────────────────────
+  const wrapSt = {
+    minHeight: "80vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "var(--auth-bg)",
+    padding: 20,
+  };
+  const cardSt = { width: "100%", maxWidth: 440, padding: 36 };
+  // Auth logo: use <AuthLogo /> component defined above
 
   // ── RENDER: OTP verification (signup) ─────────────────────────────────────
   if (step === "otp")
@@ -9401,18 +9256,113 @@ const AuthPage = ({ mode, setPage, setUser }) => {
       />
     );
 
-  // ── RENDER: Forgot password ───────────────────────────────────────────────
+  // ── RENDER: Forgot password – enter email ─────────────────────────────────
   if (step === "forgot")
     return (
-      <div className="auth-shell">
-        <AuthBrandPanel />
-        <div className="auth-form-side">
-        <div className="auth-card">
+      <div style={wrapSt}>
+        <div className="card" style={cardSt}>
           <AuthLogo />
           <div style={{ textAlign: "center", marginBottom: 24 }}>
             <div style={{ fontSize: 40, marginBottom: 8 }}>🔑</div>
             <h1 style={{ fontWeight: 800, fontSize: 22, color: "var(--text)" }}>
-              Reset your password
+              Forgot password?
+            </h1>
+            <p style={{ color: "var(--text-faint)", fontSize: 13, marginTop: 6 }}>
+              Enter your email and Firebase will send you a reset link
+            </p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div className="form-group">
+              <label>Registered Email</label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={otpEmail}
+                onChange={(e) => { setOtpEmail(e.target.value); setError(""); }}
+              />
+            </div>
+            <ErrBox error={error} />
+            <button
+              className="btn-primary"
+              style={{ width: "100%", justifyContent: "center", padding: 13, fontSize: 15, opacity: loading ? 0.6 : 1 }}
+              onClick={handleForgotSend}
+              disabled={loading}
+            >
+              {loading ? "Sending…" : "Send Reset Link"}
+            </button>
+            <button
+              style={{ background: "none", border: "none", color: "#7C3AED", fontWeight: 600, cursor: "pointer", fontSize: 13, textAlign: "center" }}
+              onClick={() => { setStep("form"); setError(""); }}
+            >
+              ← Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+  // ── RENDER: Reset email sent confirmation ─────────────────────────────────
+  if (step === "reset-sent")
+    return (
+      <div style={wrapSt}>
+        <div className="card" style={cardSt}>
+          <AuthLogo />
+          <div style={{ textAlign: "center", padding: "8px 0 24px" }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>📬</div>
+            <h1 style={{ fontWeight: 800, fontSize: 22, color: "var(--text)", marginBottom: 10 }}>Check your inbox</h1>
+            <p style={{ color: "var(--text-faint)", fontSize: 13, lineHeight: 1.7 }}>
+              We sent a password reset link to<br/>
+              <strong style={{ color: "var(--text)" }}>{otpEmail}</strong>
+            </p>
+            <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 12, padding: "14px 16px", margin: "20px 0", fontSize: 13, color: "#166534", textAlign: "left" }}>
+              <strong>What to do next:</strong>
+              <ol style={{ margin: "8px 0 0", paddingLeft: 18, lineHeight: 2 }}>
+                <li>Open the email from <strong>Firebase / noreply@…</strong></li>
+                <li>Click <strong>"Reset password"</strong> in the email</li>
+                <li>Set your new password on the page that opens</li>
+                <li>Come back here and log in ✅</li>
+              </ol>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 20 }}>
+              Didn't get it? Check your spam folder, or{" "}
+              <span style={{ color: "#7C3AED", fontWeight: 600, cursor: "pointer" }} onClick={() => { setStep("forgot"); setError(""); }}>try again</span>.
+            </p>
+            <button className="btn-primary" style={{ width: "100%", justifyContent: "center", padding: 12 }}
+              onClick={() => { setStep("form"); setError(""); setOtpEmail(""); }}>
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+  // ── RENDER: Forgot password – OTP + new password ──────────────────────────
+  // Reuses OtpBox for the same lock/attempt UI, with the new-password field appended
+  if (step === "reset")
+    return (
+      <div
+        style={{
+          minHeight: "80vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--auth-bg)",
+          padding: 20,
+        }}
+      >
+        <div
+          className="card"
+          style={{ width: "100%", maxWidth: 440, padding: 36 }}
+        >
+          <AuthLogo />
+
+          {/* Header */}
+          <div style={{ textAlign: "center", marginBottom: 24 }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>
+              {lockTimer > 0 ? "⏳" : "🔑"}
+            </div>
+            <h1 style={{ fontWeight: 800, fontSize: 22, color: "var(--text)" }}>
+              {lockTimer > 0 ? "Too many attempts" : "Reset your password"}
             </h1>
             <p
               style={{
@@ -9422,22 +9372,350 @@ const AuthPage = ({ mode, setPage, setUser }) => {
                 lineHeight: 1.6,
               }}
             >
-              Enter your email and we'll send you a secure link to reset your
-              password.
+              {lockTimer > 0 ? (
+                <>
+                  Wait{" "}
+                  <strong style={{ color: "#EF4444" }}>{lockTimer}s</strong>{" "}
+                  before retrying.
+                </>
+              ) : (
+                <>
+                  Enter the OTP sent to <strong>{otpEmail}</strong> and your new
+                  password
+                </>
+              )}
             </p>
           </div>
+
+          {/* OTP boxes */}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              justifyContent: "center",
+              marginBottom: 12,
+            }}
+          >
+            {otpInput.map((v, i) => (
+              <input
+                key={i}
+                ref={otpRefs[i]}
+                maxLength={1}
+                value={v}
+                onChange={(e) =>
+                  lockTimer === 0 && handleOtpKey(i, e.target.value)
+                }
+                onKeyDown={(e) => lockTimer === 0 && handleOtpBackspace(i, e)}
+                disabled={lockTimer > 0}
+                style={{
+                  width: 46,
+                  height: 54,
+                  borderRadius: 12,
+                  border: `2px solid ${lockTimer > 0 ? "var(--red)" : error && error.startsWith("Incorrect") ? "#EF4444" : v ? "var(--violet)" : "var(--border)"}`,
+                  textAlign: "center",
+                  fontSize: 22,
+                  fontWeight: 700,
+                  outline: "none",
+                  background:
+                    lockTimer > 0 ? "var(--tint-red)" : v ? "var(--tint-violet)" : "var(--card)",
+                  color: lockTimer > 0 ? "#EF4444" : "var(--text)",
+                  transition: "border 0.2s, background 0.2s",
+                  cursor: lockTimer > 0 ? "not-allowed" : "text",
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Attempt indicator (when not locked) */}
+          {lockTimer === 0 && otpAttempts > 0 && (
+            <p
+              style={{
+                textAlign: "center",
+                fontSize: 12,
+                color: otpAttempts === 2 ? "#EF4444" : "var(--amber)",
+                marginBottom: 14,
+                fontWeight: 600,
+              }}
+            >
+              {3 - otpAttempts} attempt{3 - otpAttempts === 1 ? "" : "s"}{" "}
+              remaining
+            </p>
+          )}
+
+          {/* Lock countdown UI (when locked) */}
+          {lockTimer > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ textAlign: "center", marginBottom: 12 }}>
+                <span
+                  style={{ fontSize: 28, fontWeight: 800, color: "#EF4444" }}
+                >
+                  {lockTimer}
+                </span>
+                <span style={{ fontSize: 13, color: "var(--text-faint)", marginLeft: 4 }}>
+                  seconds
+                </span>
+              </div>
+              <div
+                style={{
+                  height: 5,
+                  background: "var(--tint-red)",
+                  borderRadius: 99,
+                  overflow: "hidden",
+                  marginBottom: 12,
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    background: "#EF4444",
+                    borderRadius: 99,
+                    width: `${(lockTimer / (lockDuration - 30)) * 100}%`,
+                    transition: "width 1s linear",
+                  }}
+                />
+              </div>
+              <p
+                style={{ fontSize: 12, color: "var(--text-faint)", textAlign: "center" }}
+              >
+                Too many wrong attempts. Please wait before trying again.
+              </p>
+            </div>
+          )}
+
+          {/* New password field — only show when not locked */}
+          {lockTimer === 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <PasswordInput
+                label="New Password"
+                value={resetPassword}
+                onChange={setResetPassword}
+                show={showPass}
+                toggleShow={() => setShowPass((s) => !s)}
+                placeholder="Min. 6 characters"
+              />
+            </div>
+          )}
+
+          <ErrBox error={error} />
+
+          {/* Submit button */}
+          <button
+            className="btn-primary"
+            style={{
+              width: "100%",
+              justifyContent: "center",
+              padding: 13,
+              fontSize: 15,
+              marginTop: 8,
+              opacity: lockTimer > 0 ? 0.55 : 1,
+              cursor: lockTimer > 0 ? "not-allowed" : "pointer",
+              background:
+                lockTimer > 0
+                  ? "linear-gradient(135deg,#EF4444,#F87171)"
+                  : undefined,
+            }}
+            onClick={handleResetSubmit}
+            disabled={lockTimer > 0}
+          >
+            {lockTimer > 0 ? `Wait ${lockTimer}s` : "Reset Password"}
+          </button>
+
+          {/* Footer */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 14,
+              fontSize: 13,
+            }}
+          >
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--text-faint)",
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                setStep("forgot");
+                setError("");
+                setOtpInput(["", "", "", "", "", ""]);
+                setOtpAttempts(0);
+                setLockTimer(0);
+                clearInterval(lockRef.current);
+              }}
+            >
+              ← Back
+            </button>
+            {otpTimer > 0 || lockTimer > 0 ? (
+              <span style={{ color: "var(--text-faint)" }}>
+                Resend in {lockTimer > 0 ? lockTimer : otpTimer}s
+              </span>
+            ) : (
+              <button
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#7C3AED",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+                onClick={resendOtp}
+              >
+                Resend OTP
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+
+  // ── RENDER: Main login / signup form ──────────────────────────────────────
+  return (
+    <div style={wrapSt}>
+      <div className="card" style={cardSt}>
+        <AuthLogo />
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <h1 style={{ fontWeight: 800, fontSize: 24, color: "var(--text)" }}>
+            {mode === "login" ? "Welcome back" : "Create your account"}
+          </h1>
+          <p style={{ color: "var(--text-faint)", fontSize: 14, marginTop: 6 }}>
+            {mode === "login"
+              ? "Sign in to your CareerNova account"
+              : "Start your journey with CareerNova"}
+          </p>
+        </div>
+
+        {/* Role toggle – signup only */}
+        {mode === "signup" && (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              background: "var(--border-soft)",
+              padding: 4,
+              borderRadius: 12,
+              marginBottom: 20,
+            }}
+          >
+            {[
+              ["seeker", "Job Seeker", "user"],
+              ["employer", "Employer", "building"],
+            ].map(([val, label, icon]) => (
+              <button
+                key={val}
+                onClick={() => F("role", val)}
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  padding: "9px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  background: form.role === val ? "white" : "transparent",
+                  color: form.role === val ? "#7C3AED" : "var(--text-muted)",
+                  boxShadow:
+                    form.role === val ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+                  transition: "all 0.2s",
+                }}
+              >
+                <Icon name={icon} size={14} />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Continue with Google */}
+        <GoogleButton onLogin={handleGoogleLogin} />
+        <div className="auth-or">or continue with email</div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {mode === "signup" && (
+            <div className="form-group">
+              <label>Full Name</label>
+              <input
+                placeholder="John Doe"
+                value={form.name}
+                onChange={(e) => F("name", e.target.value)}
+              />
+            </div>
+          )}
           <div className="form-group">
-            <label>Registered Email</label>
+            <label>Email Address</label>
             <input
               type="email"
               placeholder="you@example.com"
-              value={forgotEmail}
-              onChange={(e) => {
-                setForgotEmail(e.target.value);
-                setError("");
-              }}
+              value={form.email}
+              onChange={(e) => F("email", e.target.value)}
             />
           </div>
+          <PasswordInput
+            label="Password"
+            value={form.password}
+            onChange={(v) => F("password", v)}
+            show={showPass}
+            toggleShow={() => setShowPass((s) => !s)}
+          />
+          {mode === "signup" && (
+            <PasswordInput
+              label="Confirm Password"
+              value={form.confirm}
+              onChange={(v) => F("confirm", v)}
+              show={showConfirm}
+              toggleShow={() => setShowConfirm((s) => !s)}
+              placeholder="Repeat your password"
+            />
+          )}
+          {/* Password strength – signup only */}
+          {mode === "signup" &&
+            form.password.length > 0 &&
+            (() => {
+              const strength =
+                form.password.length < 6
+                  ? 1
+                  : form.password.length < 10
+                    ? 2
+                    : /[A-Z]/.test(form.password) && /[0-9]/.test(form.password)
+                      ? 4
+                      : 3;
+              const colors = ["", "#EF4444", "#F59E0B", "#3B82F6", "#10B981"];
+              const labels = ["", "Weak", "Fair", "Good", "Strong"];
+              return (
+                <div>
+                  <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                    {[1, 2, 3, 4].map((i) => (
+                      <div
+                        key={i}
+                        style={{
+                          flex: 1,
+                          height: 4,
+                          borderRadius: 99,
+                          background:
+                            i <= strength ? colors[strength] : "var(--border)",
+                          transition: "background 0.3s",
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: colors[strength],
+                      fontWeight: 600,
+                    }}
+                  >
+                    {labels[strength]}
+                  </div>
+                </div>
+              );
+            })()}
           <ErrBox error={error} />
           <button
             className="btn-primary"
@@ -9448,116 +9726,20 @@ const AuthPage = ({ mode, setPage, setUser }) => {
               fontSize: 15,
               opacity: loading ? 0.7 : 1,
             }}
-            onClick={handleForgotSend}
+            onClick={mode === "login" ? handleLoginSubmit : handleSignupSubmit}
             disabled={loading}
           >
-            {loading ? "Sending…" : "Send Reset Link"}
-          </button>
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              color: "#7C3AED",
-              fontWeight: 600,
-              cursor: "pointer",
-              fontSize: 13,
-              textAlign: "center",
-              marginTop: 14,
-              width: "100%",
-            }}
-            onClick={() => {
-              setStep("form");
-              setError("");
-            }}
-          >
-            ← Back to Login
+            {loading
+              ? mode === "login"
+                ? "Signing in…"
+                : "Sending OTP…"
+              : mode === "login"
+                ? "Sign In"
+                : "Continue →"}
           </button>
         </div>
-        </div>
-      </div>
-    );
 
-  // ── RENDER: Login / Signup form ───────────────────────────────────────────
-  const isSignup = mode === "signup";
-  return (
-    <div className="auth-shell">
-      <AuthBrandPanel />
-      <div className="auth-form-side">
-      <div className="auth-card">
-        <AuthLogo />
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <h1 style={{ fontWeight: 800, fontSize: 24, color: "var(--text)" }}>
-            {isSignup ? "Create your account" : "Welcome back"}
-          </h1>
-          <p style={{ color: "var(--text-faint)", fontSize: 13, marginTop: 6 }}>
-            {isSignup
-              ? "Join CareerNova and find work that moves your career forward"
-              : "Log in to continue your job search"}
-          </p>
-        </div>
-
-        {/* Continue with Google */}
-        <GoogleButton onLogin={handleGoogleLogin} />
-        <div className="auth-or">or continue with email</div>
-
-        {isSignup && (
-          <IconInput
-            label="Full Name"
-            icon="user"
-            placeholder="Your full name"
-            value={form.name}
-            onChange={(v) => F("name", v)}
-          />
-        )}
-        <IconInput
-          label="Email"
-          icon="mail"
-          type="email"
-          placeholder="you@example.com"
-          value={form.email}
-          onChange={(v) => F("email", v)}
-        />
-        <PasswordInput
-          label="Password"
-          value={form.password}
-          onChange={(v) => F("password", v)}
-          show={showPass}
-          toggleShow={() => setShowPass((s) => !s)}
-        />
-        {isSignup && (
-          <PasswordInput
-            label="Confirm Password"
-            value={form.confirm}
-            onChange={(v) => F("confirm", v)}
-            show={showConfirm}
-            toggleShow={() => setShowConfirm((s) => !s)}
-            placeholder="Repeat your password"
-          />
-        )}
-
-        <ErrBox error={error} />
-        <button
-          className="btn-primary"
-          style={{
-            width: "100%",
-            justifyContent: "center",
-            padding: 13,
-            fontSize: 15,
-            opacity: loading ? 0.7 : 1,
-          }}
-          onClick={isSignup ? handleSignupSubmit : handleLoginSubmit}
-          disabled={loading}
-        >
-          {loading
-            ? isSignup
-              ? "Creating account…"
-              : "Signing in…"
-            : isSignup
-              ? "Create Account"
-              : "Sign In"}
-        </button>
-
-        {!isSignup && (
+        {mode === "login" && (
           <div style={{ textAlign: "center", marginTop: 14 }}>
             <span
               style={{
@@ -9576,24 +9758,8 @@ const AuthPage = ({ mode, setPage, setUser }) => {
           </div>
         )}
         <div className="divider" />
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: 14,
-            color: "var(--text-muted)",
-          }}
-        >
-          {isSignup ? (
-            <>
-              Already have an account?{" "}
-              <span
-                style={{ color: "#7C3AED", fontWeight: 700, cursor: "pointer" }}
-                onClick={() => setPage("login")}
-              >
-                Log In
-              </span>
-            </>
-          ) : (
+        <div style={{ textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
+          {mode === "login" ? (
             <>
               Don't have an account?{" "}
               <span
@@ -9603,318 +9769,17 @@ const AuthPage = ({ mode, setPage, setUser }) => {
                 Sign Up
               </span>
             </>
-          )}
-        </div>
-      </div>
-      </div>
-    </div>
-  );
-};
-
-// ─── PROFILE SETUP (Onboarding wizard shown after fresh signup) ───────────────
-const SETUP_STEPS = [
-  { id: "basic",      label: "Basic Info",   icon: "user",     desc: "Tell employers who you are" },
-  { id: "skills",     label: "Skills",       icon: "lightning", desc: "Highlight what you know" },
-  { id: "experience", label: "Experience",   icon: "send",     desc: "Share your work history" },
-];
-
-const ProfileSetupPage = ({ user, setPage }) => {
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState({
-    name: user?.name || "",
-    headline: "",
-    location: "",
-    about: "",
-    email: user?.email || "",
-  });
-  const [skills, setSkills] = useState([]);
-  const [skillInput, setSkillInput] = useState("");
-  const [experience, setExperience] = useState([]);
-  const [expForm, setExpForm] = useState({ role: "", company: "", period: "", desc: "" });
-  const [showExpForm, setShowExpForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const totalSteps = SETUP_STEPS.length;
-  const pct = Math.round(((step) / totalSteps) * 100);
-
-  const addSkill = () => {
-    const v = skillInput.trim();
-    if (!v || skills.includes(v)) { setSkillInput(""); return; }
-    setSkills((p) => [...p, v]);
-    setSkillInput("");
-  };
-  const removeSkill = (s) => setSkills((p) => p.filter((x) => x !== s));
-
-  const addExp = () => {
-    if (!expForm.role.trim() || !expForm.company.trim()) return;
-    setExperience((p) => [...p, { ...expForm }]);
-    setExpForm({ role: "", company: "", period: "", desc: "" });
-    setShowExpForm(false);
-  };
-  const removeExp = (i) => setExperience((p) => p.filter((_, idx) => idx !== i));
-
-  const finish = () => {
-    setSaving(true);
-    try {
-      localStorage.setItem("cn_profile", JSON.stringify({ form, skills, experience, photo: "" }));
-      localStorage.setItem("cn_profile_setup_done", "1");
-    } catch {}
-    setTimeout(() => setPage("dashboard"), 400);
-  };
-
-  const skip = () => {
-    try { localStorage.setItem("cn_profile_setup_done", "1"); } catch {}
-    setPage("dashboard");
-  };
-
-  const canNext = () => {
-    if (step === 0) return form.name.trim() && form.headline.trim();
-    return true; // skills and exp are optional
-  };
-
-  const SUGGESTED_SKILLS = ["React", "JavaScript", "Python", "Node.js", "TypeScript", "SQL", "Figma", "AWS", "Java", "Go", "Docker", "Git"];
-
-  return (
-    <div style={{
-      minHeight: "calc(100vh - 64px)", background: "var(--auth-bg)",
-      display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 16px",
-    }}>
-      <div style={{ width: "100%", maxWidth: 560 }}>
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{
-            width: 52, height: 52, borderRadius: 16,
-            background: "linear-gradient(135deg,#151B3D,#7C3AED)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            margin: "0 auto 16px", boxShadow: "0 6px 20px rgba(124,58,237,0.35)",
-          }}>
-            <Icon name="lightning" size={24} />
-          </div>
-          <h1 style={{ fontWeight: 800, fontSize: 26, color: "var(--text)", marginBottom: 6 }}>
-            Let's build your profile
-          </h1>
-          <p style={{ color: "var(--text-faint)", fontSize: 14 }}>
-            Complete your profile to get better job matches — takes 2 minutes
-          </p>
-        </div>
-
-        {/* Step indicators */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 24, justifyContent: "center" }}>
-          {SETUP_STEPS.map((s, i) => (
-            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: "50%",
-                background: i < step ? "var(--grad-btn)" : i === step ? "linear-gradient(135deg,#7C3AED,#22D3EE)" : "var(--border)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: i <= step ? "white" : "var(--text-faint)",
-                fontSize: 13, fontWeight: 700,
-                boxShadow: i === step ? "0 4px 14px rgba(124,58,237,0.4)" : "none",
-                transition: "all 0.3s",
-              }}>
-                {i < step ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : i + 1}
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: i === step ? "var(--text)" : "var(--text-faint)", display: step > 1 ? "none" : undefined }}>
-                {s.label}
+          ) : (
+            <>
+              Already have an account?{" "}
+              <span
+                style={{ color: "#7C3AED", fontWeight: 700, cursor: "pointer" }}
+                onClick={() => setPage("login")}
+              >
+                Log In
               </span>
-              {i < totalSteps - 1 && (
-                <div style={{ width: 24, height: 2, background: i < step ? "#7C3AED" : "var(--border)", borderRadius: 2, transition: "background 0.3s" }} />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Progress bar */}
-        <div className="progress-bar" style={{ marginBottom: 24, height: 5 }}>
-          <div className="progress-fill" style={{ width: `${pct}%`, transition: "width 0.5s ease" }} />
-        </div>
-
-        {/* Card */}
-        <div className="card" style={{ padding: 32, borderRadius: 20, animation: "authFadeUp 0.35s ease" }}>
-          <div style={{ marginBottom: 24 }}>
-            <h2 style={{ fontWeight: 800, fontSize: 20, color: "var(--text)", marginBottom: 4 }}>
-              {SETUP_STEPS[step].label}
-            </h2>
-            <p style={{ fontSize: 13, color: "var(--text-faint)" }}>{SETUP_STEPS[step].desc}</p>
-          </div>
-
-          {/* ── Step 0: Basic Info ── */}
-          {step === 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label>Full Name *</label>
-                  <input value={form.name} placeholder="e.g. Riya Sharma"
-                    onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label>Professional Headline *</label>
-                  <input value={form.headline} placeholder="e.g. Frontend Developer"
-                    onChange={(e) => setForm((p) => ({ ...p, headline: e.target.value }))} />
-                </div>
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label>Location</label>
-                  <input value={form.location} placeholder="e.g. Bengaluru, India"
-                    onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input value={form.email} placeholder="you@example.com" type="email"
-                    onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>About You</label>
-                <textarea rows={3} value={form.about} placeholder="A short bio about your background, interests and what you're looking for..."
-                  onChange={(e) => setForm((p) => ({ ...p, about: e.target.value }))} />
-              </div>
-            </div>
+            </>
           )}
-
-          {/* ── Step 1: Skills ── */}
-          {step === 1 && (
-            <div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14, minHeight: 36 }}>
-                {skills.length === 0 && (
-                  <span style={{ fontSize: 13, color: "var(--text-faint)" }}>No skills added yet — pick from suggestions or type your own.</span>
-                )}
-                {skills.map((s) => (
-                  <span key={s} style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
-                    background: "var(--tint-violet)", color: "#7C3AED",
-                    padding: "5px 12px", borderRadius: 999, fontSize: 13, fontWeight: 600,
-                  }}>
-                    {s}
-                    <button onClick={() => removeSkill(s)} style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      color: "#7C3AED", lineHeight: 1, padding: 0, fontSize: 14,
-                    }}>×</button>
-                  </span>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                <input value={skillInput} placeholder="Type a skill and press Add"
-                  onChange={(e) => setSkillInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addSkill()}
-                  style={{ flex: 1 }} />
-                <button className="btn-primary" onClick={addSkill} style={{ whiteSpace: "nowrap", padding: "10px 18px" }}>Add</button>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-faint)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Suggested Skills</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {SUGGESTED_SKILLS.filter((s) => !skills.includes(s)).map((s) => (
-                    <button key={s} onClick={() => setSkills((p) => [...p, s])} style={{
-                      padding: "5px 13px", borderRadius: 999, fontSize: 13, fontWeight: 600,
-                      border: "1.5px dashed var(--border)", background: "transparent",
-                      color: "var(--text-muted)", cursor: "pointer",
-                    }}>{s}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Step 2: Experience ── */}
-          {step === 2 && (
-            <div>
-              {experience.length === 0 && !showExpForm && (
-                <div style={{ textAlign: "center", padding: "20px 0 12px", color: "var(--text-faint)", fontSize: 13 }}>
-                  No experience added yet. You can always add it later from your profile.
-                </div>
-              )}
-              {experience.map((e, i) => (
-                <div key={i} style={{
-                  padding: "12px 16px", border: "1px solid var(--border)", borderRadius: 12,
-                  marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-                }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>{e.role}</div>
-                    <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{e.company} · {e.period}</div>
-                    {e.desc && <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>{e.desc}</div>}
-                  </div>
-                  <button onClick={() => removeExp(i)} style={{
-                    background: "none", border: "none", cursor: "pointer", color: "var(--text-faint)", fontSize: 18, lineHeight: 1,
-                  }}>×</button>
-                </div>
-              ))}
-              {showExpForm ? (
-                <div style={{ border: "1.5px solid var(--border)", borderRadius: 14, padding: 20, marginTop: 8 }}>
-                  <div className="grid-2" style={{ marginBottom: 10 }}>
-                    <div className="form-group">
-                      <label>Job Title *</label>
-                      <input value={expForm.role} placeholder="e.g. Frontend Developer"
-                        onChange={(e) => setExpForm((p) => ({ ...p, role: e.target.value }))} />
-                    </div>
-                    <div className="form-group">
-                      <label>Company *</label>
-                      <input value={expForm.company} placeholder="e.g. Google"
-                        onChange={(e) => setExpForm((p) => ({ ...p, company: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 10 }}>
-                    <label>Period</label>
-                    <input value={expForm.period} placeholder="e.g. 2022 – Present"
-                      onChange={(e) => setExpForm((p) => ({ ...p, period: e.target.value }))} />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 14 }}>
-                    <label>Description</label>
-                    <textarea rows={2} value={expForm.desc} placeholder="Brief description of your role..."
-                      onChange={(e) => setExpForm((p) => ({ ...p, desc: e.target.value }))} />
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button className="btn-primary" onClick={addExp} style={{ padding: "9px 20px" }}>Save</button>
-                    <button className="btn-ghost" onClick={() => { setShowExpForm(false); setExpForm({ role: "", company: "", period: "", desc: "" }); }}
-                      style={{ padding: "9px 20px" }}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <button className="btn-outline" onClick={() => setShowExpForm(true)} style={{ marginTop: 8, width: "100%", justifyContent: "center" }}>
-                  + Add Experience
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Navigation */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 28 }}>
-            <button
-              onClick={skip}
-              style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "8px 0" }}
-            >
-              {step === totalSteps - 1 ? "Skip & finish later" : "Skip all →"}
-            </button>
-            <div style={{ display: "flex", gap: 10 }}>
-              {step > 0 && (
-                <button className="btn-ghost" onClick={() => setStep((s) => s - 1)} style={{ padding: "10px 20px" }}>
-                  ← Back
-                </button>
-              )}
-              {step < totalSteps - 1 ? (
-                <button
-                  className="btn-primary"
-                  onClick={() => canNext() && setStep((s) => s + 1)}
-                  style={{ padding: "10px 24px", opacity: canNext() ? 1 : 0.5 }}
-                >
-                  Next →
-                </button>
-              ) : (
-                <button className="btn-primary" onClick={finish} disabled={saving}
-                  style={{ padding: "10px 28px", opacity: saving ? 0.7 : 1 }}>
-                  {saving ? "Saving…" : "🎉 Complete Setup"}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Step label row */}
-        <div style={{ textAlign: "center", marginTop: 14, fontSize: 12, color: "var(--text-faint)" }}>
-          Step {step + 1} of {totalSteps} · You can edit everything later in your profile
         </div>
       </div>
     </div>
@@ -10428,6 +10293,12 @@ const ResourcesPage = () => {
 export default function App() {
   const [page, setPage] = useState("home");
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(() => {
+    try {
+      const saved = localStorage.getItem("cn_profile");
+      return saved ? JSON.parse(saved) : emptyProfile;
+    } catch { return emptyProfile; }
+  });
   const [savedJobs, setSavedJobs] = useState([]);
   const [applications, setApplications] = useState([]);
   const [employerJobs, setEmployerJobs] = useState(() => {
@@ -10469,27 +10340,6 @@ export default function App() {
       localStorage.setItem("cn_theme", darkMode ? "dark" : "light");
     } catch {}
   }, [darkMode]);
-
-  // Restore Firebase auth session on mount (persists login across refresh)
-  useEffect(() => {
-    const unsub = onAuthChange((u) => {
-      if (u) {
-        setUser({
-          name: u.name,
-          email: u.email,
-          role: "Job Seeker",
-          picture: u.photo || "",
-        });
-        // If user landed on home/root after a page refresh and setup was never completed, resume it
-        const setupDone = localStorage.getItem("cn_profile_setup_done");
-        if (!setupDone) {
-          // Only redirect if they're currently on the home page (fresh refresh after signup)
-          setPage((prev) => (prev === "home" ? prev : prev));
-        }
-      }
-    });
-    return () => unsub && unsub();
-  }, []);
 
   // Persist to localStorage
   useEffect(() => {
@@ -10596,20 +10446,28 @@ export default function App() {
             user={user}
             setPage={setPage}
             setJobFilter={setJobFilter}
+            profile={profile}
+            setProfile={setProfile}
           />
         ) : (
           <AuthPage mode="login" setPage={setPage} setUser={setUser} />
+        );
+      case "profile-setup":
+        return user ? (
+          <ProfileSetupPage
+            user={user}
+            setPage={setPage}
+            profile={profile}
+            setProfile={setProfile}
+            showToast={showToast}
+          />
+        ) : (
+          <AuthPage mode="signup" setPage={setPage} setUser={setUser} />
         );
       case "login":
         return <AuthPage mode="login" setPage={setPage} setUser={setUser} />;
       case "signup":
         return <AuthPage mode="signup" setPage={setPage} setUser={setUser} />;
-      case "profile-setup":
-        return user ? (
-          <ProfileSetupPage user={user} setPage={setPage} />
-        ) : (
-          <AuthPage mode="signup" setPage={setPage} setUser={setUser} />
-        );
       default:
         return (
           <HomePage setPage={setPage} setJobFilter={setJobFilter} user={user} />

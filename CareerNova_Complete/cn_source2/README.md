@@ -12,8 +12,18 @@ Open `CareerNova_Site/index.html` in your browser. Done!
 1. Install **Node.js 18+** from https://nodejs.org
 2. Open a terminal in this folder (cn_source2)
 3. Run: `npm install`
-4. Run: `npm run dev`
-5. Visit: http://localhost:5173
+4. **Start the OTP server** (required for email verification on sign-up):
+   - Open a **second** terminal
+   - Run: `node src/server.js`
+   - It will start on http://localhost:4000
+   - *Note:* update the Gmail App Password in `src/server.js` if needed
+5. Back in the first terminal run: `npm run dev`
+6. Visit: http://localhost:5173
+
+> **Email OTP verification** — when creating a new account (Job Seeker **or**
+> Employer), a 6-digit OTP is emailed to you. You must enter it before the
+> account is created. The OTP server (`src/server.js`) handles sending and
+> verifying these codes, so keep it running alongside `npm run dev`.
 
 ## 🏗️ Option C — Rebuild for production
 
