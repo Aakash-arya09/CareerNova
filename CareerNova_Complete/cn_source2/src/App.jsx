@@ -10408,8 +10408,15 @@ const ResourcesPage = () => {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [page, setPage] = useState("home");
+  // ── Restore last page from session (fixes back button / reload page loss) ──
+  const [page, setPage] = useState(() => {
+    try { return sessionStorage.getItem("cn_page") || "home"; } catch { return "home"; }
+  });
+
+  // ── Auth: null = unknown, false = logged out, object = logged in ───────────
+  // We use null during the Firebase check so we don't flash a blank screen
   const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState(() => {
     try {
       const saved = localStorage.getItem("cn_profile");
@@ -10447,7 +10454,42 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   };
 
-  // Apply + persist theme
+  // ── Firebase auth persistence: restore session on every reload ─────────────
+  useEffect(() => {
+    const unsub = onAuthChange((firebaseUser) => {
+      if (firebaseUser) {
+        setUser(prev => prev || {
+          name:  firebaseUser.name  || firebaseUser.email?.split("@")[0],
+          email: firebaseUser.email,
+          photo: firebaseUser.photo || null,
+          role:  "Job Seeker",
+        });
+      } else {
+        setUser(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  // ── Remember the current page so reload doesn't reset to home ────────────
+  useEffect(() => {
+    try { sessionStorage.setItem("cn_page", page); } catch {}
+  }, [page]);
+
+  // ── Browser back / forward button support ─────────────────────────────────
+  useEffect(() => {
+    const handlePop = () => {
+      try {
+        const p = sessionStorage.getItem("cn_page");
+        if (p) setPage(p);
+      } catch {}
+    };
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, []);
+
+  // ── Apply + persist theme ─────────────────────────────────────────────────
   useEffect(() => {
     document.documentElement.setAttribute(
       "data-theme",
@@ -10596,6 +10638,34 @@ export default function App() {
   useEffect(() => {
     if (jobFilter?.selected && page !== "apply-job") setPage("job-detail");
   }, [jobFilter?.selected]);
+
+  // ── While Firebase is confirming auth state, show a clean loading screen ──
+  if (authLoading) return (
+    <ThemeContext.Provider value={{ darkMode, setDarkMode }}>
+      <div style={{
+        minHeight: "100vh", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        background: "var(--bg)", gap: 20,
+      }}
+        data-theme={darkMode ? "dark" : "light"}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 14,
+          background: "#151B3D",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 4px 20px rgba(124,58,237,0.35)",
+        }}>
+          <CnMark size={32} />
+        </div>
+        <div style={{
+          width: 36, height: 4, borderRadius: 99,
+          background: "linear-gradient(90deg,#7C3AED,#22D3EE)",
+          animation: "shimmer 1.2s ease infinite",
+          backgroundSize: "200% 100%",
+        }} />
+        <style>{`@keyframes spin-bar{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+      </div>
+    </ThemeContext.Provider>
+  );
 
   return (
     <ThemeContext.Provider value={{ darkMode, setDarkMode }}>
