@@ -6817,7 +6817,7 @@ const SettingsSection = ({ showToast }) => {
     setEmailVerifyLoading(true);
     setEmailOtpError("");
     try {
-      const res = await fetch("http://localhost:4000/send-otp", {
+      const res = await fetch("/api/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -6908,7 +6908,7 @@ const SettingsSection = ({ showToast }) => {
     const verifyUser = auth.currentUser;
     const verifyEmail = (verifyUser && verifyUser.email) || account.email;
     try {
-      const res = await fetch("http://localhost:4000/verify-otp", {
+      const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: verifyEmail, otp: entered }),
@@ -8978,7 +8978,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
       const purpose = step === "reset" ? "reset" : "signup";
       const email = step === "reset" ? otpEmail : form.email;
       const name = step === "reset" ? "" : form.name;
-      const res = await fetch("http://localhost:4000/send-otp", {
+      const res = await fetch("/api/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, name, purpose }),
@@ -9001,7 +9001,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("http://localhost:4000/send-otp", {
+      const res = await fetch("/api/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: form.email, name: form.name.trim(), purpose: "signup" }),
@@ -9027,7 +9027,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("http://localhost:4000/verify-otp", {
+      const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: form.email, otp: entered }),
@@ -9157,7 +9157,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
     setError("");
     let verified = false;
     try {
-      const res = await fetch("http://localhost:4000/verify-otp", {
+      const res = await fetch("/api/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: otpEmail, otp: entered }),
