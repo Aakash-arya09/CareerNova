@@ -1761,7 +1761,6 @@ const styles = `
     .grid-4 { grid-template-columns: 1fr 1fr !important; }
 
     /* Dashboard: tab bar lives at bottom, content needs clearance */
-    .dash-layout  { flex-direction: column !important; }
     .dash-content { padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important; }
 
     /* Overlay / drawer safe width */
@@ -1770,7 +1769,8 @@ const styles = `
 
   /* ── Phone  ≤640px — hide desktop sidebar, show mobile tab bar ─── */
   @media (max-width: 640px) {
-    .hide-mobile { display: none !important; }
+    .hide-mobile  { display: none !important; }
+    .dash-layout  { flex-direction: column !important; }
   }
 
   /* ── Mobile  ≤600px ─────────────────────────────────────────────── */
@@ -5040,6 +5040,7 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
       className="dash-layout"
       style={{
         display: "flex",
+        alignItems: "flex-start",
         maxWidth: 1200,
         margin: "0 auto",
         padding: "clamp(14px,3vw,24px) clamp(12px,3.5vw,20px)",
@@ -5057,6 +5058,8 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
           alignSelf: "flex-start",
           position: "sticky",
           top: 76,
+          maxHeight: "calc(100vh - 96px)",
+          overflowY: "auto",
         }}
       >
         <div
@@ -5119,7 +5122,7 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
         ))}
       </div>
       {/* Content */}
-      <div className="dash-content" style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>{renderSection()}</div>
+      <div className="dash-content" style={{ flex: 1, minWidth: 0, maxWidth: "100%", alignSelf: "flex-start" }}>{renderSection()}</div>
     </div>
 
     {/* Mobile tab bar — fixed, outside the flex layout */}
