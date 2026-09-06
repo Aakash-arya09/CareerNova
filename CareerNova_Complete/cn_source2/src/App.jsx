@@ -1635,6 +1635,13 @@ const styles = `
   .show-mobile  { display: none; }
   .hide-mobile  { display: flex; }
 
+  /* Above 640px: always show sidebar, never show mobile tab bar */
+  @media (min-width: 641px) {
+    .show-mobile { display: none !important; }
+    .hide-mobile { display: flex !important; }
+    .dash-layout { flex-direction: row !important; }
+  }
+
   /* ── Scrollbar ──────────────────────────────────────────────────────── */
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -1723,13 +1730,13 @@ const styles = `
 
   /* ── Tablet portrait  ≤768px ─────────────────────────────────────── */
   @media (max-width: 768px) {
+    /* Sidebar stays visible on tablets — only hidden on phones (≤640px) */
     /* Typography */
     .section-title { font-size: clamp(20px,5.5vw,26px) !important; line-height:1.25 !important; }
     .section-sub   { font-size: clamp(13px,3.5vw,15px) !important; }
 
-    /* Show/hide */
-    .hide-mobile { display: none   !important; }
-    .show-mobile { display: flex   !important; }
+    /* Show/hide — general mobile */
+    .show-mobile { display: flex !important; }
 
     /* Buttons — keep usable on small screens */
     .btn-primary, .btn-outline, .btn-ghost {
@@ -1753,11 +1760,17 @@ const styles = `
     .grid-3 { grid-template-columns: 1fr 1fr !important; }
     .grid-4 { grid-template-columns: 1fr 1fr !important; }
 
-    /* Dashboard: bottom space for sticky tab bar */
-    .dash-content { padding-bottom: 72px !important; }
+    /* Dashboard: tab bar lives at bottom, content needs clearance */
+    .dash-layout  { flex-direction: column !important; }
+    .dash-content { padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important; }
 
     /* Overlay / drawer safe width */
     .drawer { width: min(300px, 88vw) !important; }
+  }
+
+  /* ── Phone  ≤640px — hide desktop sidebar, show mobile tab bar ─── */
+  @media (max-width: 640px) {
+    .hide-mobile { display: none !important; }
   }
 
   /* ── Mobile  ≤600px ─────────────────────────────────────────────── */
@@ -5023,12 +5036,12 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
 
   return (
     <div
+      className="dash-layout"
       style={{
         display: "flex",
         maxWidth: 1200,
         margin: "0 auto",
         padding: "clamp(14px,3vw,24px) clamp(12px,3.5vw,20px)",
-        paddingBottom: "clamp(80px,12vw,24px)",
         gap: "clamp(12px,2vw,24px)",
       }}
     >
@@ -5037,10 +5050,12 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
         className="card hide-mobile"
         style={{
           width: 230,
+          minWidth: 220,
+          flexShrink: 0,
           padding: 16,
           alignSelf: "flex-start",
           position: "sticky",
-          top: 80,
+          top: 76,
         }}
       >
         <div
@@ -5102,48 +5117,48 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
           </button>
         ))}
       </div>
-      {/* Mobile tab bar */}
-      <div
-        className="show-mobile"
-        style={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: "var(--card)",
-          borderTop: "1px solid var(--border)",
-          boxShadow: "0 -4px 20px rgba(0,0,0,0.06)",
-          zIndex: 40,
-          padding: "6px 0",
-          paddingBottom: "env(safe-area-inset-bottom,6px)",
-        }}
-      >
-        {sidebarItems.slice(0, 5).map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveSection(item.id)}
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 2,
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: "6px 4px",
-              color: activeSection === item.id ? "#7C3AED" : "var(--text-faint)",
-              fontSize: 10,
-              fontWeight: 600,
-            }}
-          >
-            <Icon name={item.icon} size={18} />
-            {item.label.split(" ")[0]}
-          </button>
-        ))}
-      </div>
       {/* Content */}
-      <div className="dash-content" style={{ flex: "1 1 0px", minWidth: 0 }}>{renderSection()}</div>
+      <div className="dash-content" style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>{renderSection()}</div>
+    </div>
+    {/* Mobile tab bar — outside flex container so it never affects layout */}
+    <div
+      className="show-mobile"
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: "var(--card)",
+        borderTop: "1px solid var(--border)",
+        boxShadow: "0 -4px 20px rgba(0,0,0,0.06)",
+        zIndex: 40,
+        padding: "6px 0",
+        paddingBottom: "env(safe-area-inset-bottom,6px)",
+      }}
+    >
+      {sidebarItems.slice(0, 5).map((item) => (
+        <button
+          key={item.id}
+          onClick={() => setActiveSection(item.id)}
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 2,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: "6px 4px",
+            color: activeSection === item.id ? "#7C3AED" : "var(--text-faint)",
+            fontSize: 10,
+            fontWeight: 600,
+          }}
+        >
+          <Icon name={item.icon} size={18} />
+          {item.label.split(" ")[0]}
+        </button>
+      ))}
     </div>
   );
 };
