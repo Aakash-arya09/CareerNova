@@ -5035,6 +5035,7 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
   };
 
   return (
+    <>
     <div
       className="dash-layout"
       style={{
@@ -5120,7 +5121,8 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
       {/* Content */}
       <div className="dash-content" style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>{renderSection()}</div>
     </div>
-    {/* Mobile tab bar — outside flex container so it never affects layout */}
+
+    {/* Mobile tab bar — fixed, outside the flex layout */}
     <div
       className="show-mobile"
       style={{
@@ -5160,6 +5162,7 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
         </button>
       ))}
     </div>
+    </>
   );
 };
 
