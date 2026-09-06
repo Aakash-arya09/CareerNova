@@ -1631,52 +1631,210 @@ const styles = `
   .nav-link { font-size: 14px; font-weight: 500; color: var(--text-soft); cursor: pointer; padding: 8px 4px; border: none; background: none; transition: color 0.15s; white-space: nowrap; }
   .nav-link:hover { color: var(--violet); }
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; backdrop-filter: blur(2px); }
-  @media (max-width: 768px) {
-    .section-title { font-size: 22px; }
-    .hide-mobile { display: none !important; }
-    .show-mobile { display: flex !important; }
-  }
-  .show-mobile { display: none; }
+  /* ── Utilities ─────────────────────────────────────────────────────── */
+  .show-mobile  { display: none; }
+  .hide-mobile  { display: flex; }
+
+  /* ── Scrollbar ──────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--violet); }
+
+  /* ── Tooltip ────────────────────────────────────────────────────────── */
   .tooltip { position: relative; }
-  .tooltip:hover::after { content: attr(data-tip); position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: #1F2937; color: white; font-size: 11px; padding: 4px 10px; border-radius: 6px; white-space: nowrap; z-index: 100; }
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: #F1F5F9; }
-  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
-  .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
-  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-  .star-bg { position: absolute; width: 3px; height: 3px; background: white; border-radius: 50%; animation: twinkle 3s infinite; }
-  @keyframes twinkle { 0%,100% { opacity:0.2; } 50% { opacity:1; } }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
-  @media (max-width: 900px) { .grid-3 { grid-template-columns: 1fr 1fr; } .grid-2 { grid-template-columns: 1fr; } }
-  @media (max-width: 600px) { .grid-3 { grid-template-columns: 1fr; } }
+  .tooltip:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1F2937;
+    color: white;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 200;
+    pointer-events: none;
+  }
+
+  /* ── Skeleton shimmer ───────────────────────────────────────────────── */
+  .skeleton {
+    background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 8px;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  .star-bg { position:absolute;width:3px;height:3px;background:white;border-radius:50%;animation:twinkle 3s infinite; }
+  @keyframes twinkle { 0%,100%{opacity:.2} 50%{opacity:1} }
+
+  /* ── Grid system ────────────────────────────────────────────────────── */
+  .grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+
+  /* ── Dark theme ─────────────────────────────────────────────────────── */
   [data-theme="dark"] body { background: var(--bg); color: var(--text); }
   [data-theme="dark"] nav { background: rgba(13,18,36,0.95) !important; border-bottom-color: var(--border) !important; box-shadow: 0 2px 20px rgba(0,0,0,0.35) !important; }
   [data-theme="dark"] .glass { background: rgba(19,26,46,0.85); border-color: var(--border); }
   [data-theme="dark"] .overlay { background: rgba(0,0,0,0.65); }
   [data-theme="dark"] .tooltip:hover::after { background: #334155; }
-  [data-theme="dark"] :is(input, select, textarea)::placeholder { color: var(--text-faint); }
-  [data-theme="dark"] ::-webkit-scrollbar-track { background: var(--card); }
+  [data-theme="dark"] :is(input,select,textarea)::placeholder { color: var(--text-faint); }
   [data-theme="dark"] ::-webkit-scrollbar-thumb { background: #334155; }
-  [data-theme="dark"] .skeleton { background: linear-gradient(90deg, #1C243C 25%, #26304A 50%, #1C243C 75%); }
+  [data-theme="dark"] .skeleton { background: linear-gradient(90deg,#1C243C 25%,#26304A 50%,#1C243C 75%); }
   [data-theme="dark"] .skeleton, [data-theme="dark"] .match-ring { --border: #26304A; }
-  [data-theme="dark"] .badge-violet { background: var(--tint-violet); color: var(--violet); }
-  [data-theme="dark"] .badge-green { background: var(--tint-green); color: var(--green); }
-  [data-theme="dark"] .badge-orange { background: var(--tint-amber); color: var(--amber); }
-  [data-theme="dark"] .badge-cyan { background: var(--tint-cyan); color: var(--teal); }
-  [data-theme="dark"] .badge-red { background: var(--tint-red); color: var(--red); }
-  [data-theme="dark"] .tag { background: var(--tint-violet); color: var(--violet); border-color: var(--border); }
-  [data-theme="dark"] .tag-cyan { background: var(--tint-cyan); color: var(--teal); border-color: var(--border); }
-  [data-theme="dark"] .tag-green { background: var(--tint-green); color: var(--green); border-color: var(--border); }
-  [data-theme="dark"] .tag-orange { background: var(--tint-amber); color: var(--amber); border-color: var(--border); }
-  [data-theme="dark"] .btn-ghost { border-color: var(--border); color: var(--text-muted); }
-  [data-theme="dark"] .btn-ghost:hover { border-color: var(--violet); color: var(--violet); }
+  [data-theme="dark"] .badge-violet { background:var(--tint-violet); color:var(--violet); }
+  [data-theme="dark"] .badge-green  { background:var(--tint-green);  color:var(--green);  }
+  [data-theme="dark"] .badge-orange { background:var(--tint-amber);  color:var(--amber);  }
+  [data-theme="dark"] .badge-cyan   { background:var(--tint-cyan);   color:var(--teal);   }
+  [data-theme="dark"] .badge-red    { background:var(--tint-red);    color:var(--red);    }
+  [data-theme="dark"] .tag          { background:var(--tint-violet); color:var(--violet); border-color:var(--border); }
+  [data-theme="dark"] .tag-cyan     { background:var(--tint-cyan);   color:var(--teal);   border-color:var(--border); }
+  [data-theme="dark"] .tag-green    { background:var(--tint-green);  color:var(--green);  border-color:var(--border); }
+  [data-theme="dark"] .tag-orange   { background:var(--tint-amber);  color:var(--amber);  border-color:var(--border); }
+  [data-theme="dark"] .btn-ghost    { border-color:var(--border); color:var(--text-muted); }
+  [data-theme="dark"] .btn-ghost:hover { border-color:var(--violet); color:var(--violet); }
   [data-theme="dark"] .divider { background: var(--border); }
   [data-theme="dark"] .sidebar-link { color: var(--text-muted); }
-  [data-theme="dark"] .sidebar-link:hover { background: var(--border-soft); color: var(--text); }
-  [data-theme="dark"] .sidebar-link.active { background: var(--tint-violet); color: var(--violet); }
+  [data-theme="dark"] .sidebar-link:hover  { background:var(--border-soft); color:var(--text); }
+  [data-theme="dark"] .sidebar-link.active { background:var(--tint-violet); color:var(--violet); }
   [data-theme="dark"] .section-title { color: var(--text); }
   [data-theme="dark"] .card { box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+
+  /* ════════════════════════════════════════════════════════════════════
+     PROFESSIONAL RESPONSIVE SYSTEM
+     — mobile-first, fluid sizing, safe-area aware, touch-friendly
+     Breakpoints: 1280 · 1024 · 768 · 600 · 480 · 360
+     ════════════════════════════════════════════════════════════════════ */
+
+  /* ── Large desktop / 4K ≥1280px ──────────────────────────────────── */
+  @media (min-width: 1280px) {
+    .grid-4 { grid-template-columns: repeat(4,1fr); }
+    .grid-3 { grid-template-columns: repeat(3,1fr); }
+  }
+
+  /* ── Tablet landscape  ≤1024px ────────────────────────────────────── */
+  @media (max-width: 1024px) {
+    .grid-4 { grid-template-columns: repeat(2,1fr); }
+    .grid-3 { grid-template-columns: repeat(2,1fr); }
+  }
+
+  /* ── Tablet portrait  ≤768px ─────────────────────────────────────── */
+  @media (max-width: 768px) {
+    /* Typography */
+    .section-title { font-size: clamp(20px,5.5vw,26px) !important; line-height:1.25 !important; }
+    .section-sub   { font-size: clamp(13px,3.5vw,15px) !important; }
+
+    /* Show/hide */
+    .hide-mobile { display: none   !important; }
+    .show-mobile { display: flex   !important; }
+
+    /* Buttons — keep usable on small screens */
+    .btn-primary, .btn-outline, .btn-ghost {
+      font-size: 13px;
+      padding: 9px 14px;
+      min-height: 44px;
+    }
+    .btn-primary { white-space: normal; word-break: break-word; }
+
+    /* Inputs — 16px prevents iOS auto-zoom */
+    input, select, textarea { font-size: 16px !important; min-height: 44px; }
+
+    /* Cards */
+    .card { border-radius: 12px !important; }
+
+    /* Sidebar links */
+    .sidebar-link { min-height: 44px; }
+
+    /* Grid collapses */
+    .grid-2 { grid-template-columns: 1fr !important; }
+    .grid-3 { grid-template-columns: 1fr 1fr !important; }
+    .grid-4 { grid-template-columns: 1fr 1fr !important; }
+
+    /* Dashboard: bottom space for sticky tab bar */
+    .dash-content { padding-bottom: 72px !important; }
+
+    /* Overlay / drawer safe width */
+    .drawer { width: min(300px, 88vw) !important; }
+  }
+
+  /* ── Mobile  ≤600px ─────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .grid-3 { grid-template-columns: 1fr !important; }
+    .grid-4 { grid-template-columns: 1fr 1fr !important; }
+
+    /* Auth card stretch */
+    .auth-card { padding: clamp(20px,5vw,36px) !important; }
+
+    /* Toast above mobile tab bar */
+    .toast-box {
+      bottom: calc(68px + env(safe-area-inset-bottom,0px)) !important;
+      left: 12px !important; right: 12px !important;
+      width: auto !important; min-width: 0 !important;
+    }
+  }
+
+  /* ── Small mobile  ≤480px ────────────────────────────────────────── */
+  @media (max-width: 480px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr !important; }
+    .section-title { font-size: clamp(18px,5vw,22px) !important; }
+
+    /* Modals go near-full-width */
+    .modal-sheet {
+      width: 96vw !important;
+      max-width: 96vw !important;
+      padding: clamp(14px,4vw,20px) !important;
+      border-radius: 16px !important;
+    }
+    /* Action button rows stack */
+    .action-row { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+    .action-row > * { width: 100% !important; justify-content: center !important; }
+  }
+
+  /* ── Very small phones  ≤360px (Galaxy A, budget phones) ─────────── */
+  @media (max-width: 360px) {
+    .section-title { font-size: 18px !important; }
+    .btn-primary, .btn-outline, .btn-ghost { font-size: 12px; padding: 8px 10px; }
+    .card { border-radius: 10px !important; }
+    nav { padding-left: 8px !important; padding-right: 8px !important; }
+  }
+
+  /* ── Touch / coarse pointer (any touch device) ──────────────────── */
+  @media (hover:none) and (pointer:coarse) {
+    button, [role="button"], .sidebar-link, .nav-link,
+    .btn-primary, .btn-outline, .btn-ghost,
+    input, select, textarea { min-height: 44px; }
+
+    /* Disable sticky hover states that get stuck on touch */
+    .job-card:hover    { transform: none !important; box-shadow: var(--shadow)   !important; }
+    .company-card:hover{ transform: none !important; box-shadow: var(--shadow)   !important; }
+    .btn-primary:hover { transform: none !important; opacity: 1 !important; }
+    .btn-outline:hover { transform: none !important; }
+  }
+
+  /* ── Landscape phone  (height ≤ 480px, width > height) ─────────── */
+  @media (max-height: 480px) and (orientation: landscape) {
+    nav  { height: 50px !important; }
+    main { min-height: calc(100dvh - 50px) !important; }
+    .hero-section { padding-top: 16px !important; padding-bottom: 16px !important; }
+    .auth-wrap  { padding: 8px 16px !important; min-height: unset !important; }
+  }
+
+  /* ── High-density / retina (cosmetic only) ──────────────────────── */
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    ::-webkit-scrollbar { width: 4px; }
+  }
+
+  /* ── Print ──────────────────────────────────────────────────────── */
+  @media print {
+    nav, .show-mobile, footer, .toast-box { display: none !important; }
+    .card { box-shadow: none !important; border: 1px solid #ccc !important; }
+    main  { min-height: auto !important; }
+    body  { background: white !important; color: #000 !important; }
+    a     { color: #000 !important; text-decoration: underline; }
+  }
 `;
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
@@ -1684,9 +1842,10 @@ const Toast = ({ msg, type = "success", onClose }) => (
   <div
     style={{
       position: "fixed",
-      bottom: 28,
-      right: 28,
+      bottom: "clamp(16px,4vw,28px)",
+      right: "clamp(12px,3vw,28px)",
       zIndex: 9999,
+      maxWidth: "calc(100vw - 24px)",
       display: "flex",
       alignItems: "center",
       gap: 10,
@@ -1703,7 +1862,7 @@ const Toast = ({ msg, type = "success", onClose }) => (
       fontSize: 14,
       fontWeight: 600,
       animation: "fadeUp 0.3s ease",
-      minWidth: 240,
+      minWidth: "min(240px,calc(100vw - 24px))",
     }}
   >
     <Icon name={type === "success" ? "check" : "x"} size={16} />
@@ -1800,11 +1959,11 @@ const Navbar = ({ page, setPage, user, setUser }) => {
           style={{
             maxWidth: 1200,
             margin: "0 auto",
-            padding: "0 20px",
+            padding: "0 clamp(12px,3vw,24px)",
             display: "flex",
             alignItems: "center",
             height: 64,
-            gap: 32,
+            gap: "clamp(8px,2vw,32px)",
           }}
         >
           {/* Logo */}
@@ -1947,8 +2106,8 @@ const Navbar = ({ page, setPage, user, setUser }) => {
               position: "fixed",
               top: 0,
               right: 0,
-              width: 280,
-              height: "100vh",
+              width: "min(300px,88vw)",
+              height: "100dvh",
               background: "var(--card)",
               zIndex: 60,
               boxShadow: "-8px 0 40px rgba(0,0,0,0.15)",
@@ -2102,7 +2261,7 @@ const JobCard = ({ job, onView, onApply, saved, onSave }) => {
         >
           {company?.logo}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: "1 1 0px", minWidth: "min(0px,100%)" }}>
           <div
             style={{
               display: "flex",
@@ -2308,7 +2467,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
           background:
             "linear-gradient(135deg, #0B1026 0%, #151B3D 50%, #1a0a3d 100%)",
           color: "white",
-          padding: "80px 20px",
+          padding: "clamp(40px,8vh,100px) clamp(12px,3.5vw,20px)",
           textAlign: "center",
           position: "relative",
           overflow: "hidden",
@@ -2383,7 +2542,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
           </div>
           <h1
             style={{
-              fontSize: "clamp(32px, 6vw, 60px)",
+              fontSize: "clamp(28px,5vw,60px)",
               fontWeight: 900,
               lineHeight: 1.1,
               marginBottom: 20,
@@ -2405,8 +2564,8 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
             style={{
               fontSize: "clamp(14px, 2vw, 18px)",
               color: "var(--text-faint)",
-              maxWidth: 560,
-              margin: "0 auto 36px",
+              maxWidth: "min(560px,100%)",
+              margin: "0 auto clamp(20px,5vw,36px)",
               lineHeight: 1.7,
             }}
           >
@@ -2431,8 +2590,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
           >
             <div
               style={{
-                flex: 2,
-                minWidth: 160,
+                flex: "2 1 160px", minWidth: "min(160px,100%)",
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
@@ -2459,8 +2617,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
             </div>
             <div
               style={{
-                flex: 1.5,
-                minWidth: 130,
+                flex: "1 1 130px", minWidth: "min(130px,100%)",
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
@@ -2488,8 +2645,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
             </div>
             <div
               style={{
-                flex: 1,
-                minWidth: 130,
+                flex: "1 1 130px", minWidth: "min(130px,100%)",
                 borderLeft: "1px solid var(--border)",
                 paddingLeft: 12,
               }}
@@ -2515,7 +2671,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
             <button
               className="btn-primary"
               onClick={handleSearch}
-              style={{ minWidth: 140, justifyContent: "center" }}
+              style={{ minWidth: "min(140px,100%)", justifyContent: "center" }}
             >
               <Icon name="search" size={16} /> Search Jobs
             </button>
@@ -2591,7 +2747,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
 
       {/* CATEGORIES */}
       <section
-        style={{ padding: "60px 20px", maxWidth: 1200, margin: "0 auto" }}
+        style={{ padding: "clamp(30px,6vw,60px) clamp(12px,3.5vw,20px)", maxWidth: 1200, margin: "0 auto" }}
       >
         <h2 className="section-title" style={{ textAlign: "center" }}>
           Browse by Category
@@ -2670,7 +2826,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
 
       {/* FEATURED JOBS */}
       <section
-        style={{ padding: "0 20px 60px", maxWidth: 1200, margin: "0 auto" }}
+        style={{ padding: "0 clamp(12px,3.5vw,20px) clamp(30px,6vw,60px)", maxWidth: 1200, margin: "0 auto" }}
       >
         <div
           style={{
@@ -2721,7 +2877,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
       <section
         style={{
           background: "linear-gradient(135deg, #0B1026, #151B3D)",
-          padding: "72px 20px",
+          padding: "clamp(36px,7vw,72px) clamp(12px,3.5vw,20px)",
           color: "white",
         }}
       >
@@ -2729,6 +2885,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
           style={{
             maxWidth: 1100,
             margin: "0 auto",
+            padding: "0 clamp(12px,3.5vw,20px)",
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             gap: 48,
@@ -2949,7 +3106,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
 
       {/* TOP COMPANIES */}
       <section
-        style={{ padding: "72px 20px", maxWidth: 1200, margin: "0 auto" }}
+        style={{ padding: "clamp(36px,7vw,72px) clamp(12px,3.5vw,20px)", maxWidth: 1200, margin: "0 auto" }}
       >
         <div
           style={{
@@ -3348,7 +3505,7 @@ const JobsPage = ({ jobFilter, setPage, setJobFilter, user }) => {
   );
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 20px" }}>
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(14px,3vw,28px) clamp(12px,3.5vw,20px)" }}>
       {/* Search Bar */}
       <div
         className="card"
@@ -3382,7 +3539,7 @@ const JobsPage = ({ jobFilter, setPage, setJobFilter, user }) => {
             placeholder="Job title, skills, or company"
           />
         </div>
-        <div style={{ flex: 1, minWidth: 130, position: "relative" }}>
+        <div style={{ flex: "1 1 130px", minWidth: "min(130px,100%)", position: "relative" }}>
           <div
             style={{
               position: "absolute",
@@ -3420,7 +3577,7 @@ const JobsPage = ({ jobFilter, setPage, setJobFilter, user }) => {
             padding: 20,
             alignSelf: "flex-start",
             position: "sticky",
-            top: 80,
+            top: 76,
           }}
         >
           <FiltersPanel />
@@ -3434,11 +3591,11 @@ const JobsPage = ({ jobFilter, setPage, setJobFilter, user }) => {
                 position: "fixed",
                 left: 0,
                 top: 0,
-                width: 280,
-                height: "100vh",
+                width: "min(300px,88vw)",
+                height: "100dvh",
                 background: "var(--card)",
                 zIndex: 60,
-                padding: 24,
+                padding: "clamp(14px,4vw,24px)",
                 overflowY: "auto",
                 boxShadow: "8px 0 40px rgba(0,0,0,0.15)",
               }}
@@ -3478,7 +3635,7 @@ const JobsPage = ({ jobFilter, setPage, setJobFilter, user }) => {
           </>
         )}
         {/* Main */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: "1 1 0px", minWidth: "min(0px,100%)" }}>
           <div
             style={{
               display: "flex",
@@ -3618,7 +3775,7 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
   };
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px" }}>
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "clamp(14px,3vw,28px) clamp(12px,3.5vw,20px)" }}>
       <button
         className="btn-ghost"
         onClick={() => setPage("jobs")}
@@ -4132,7 +4289,7 @@ const CompaniesPage = ({ setPage, setJobFilter }) => {
       c.industry.toLowerCase().includes(query.toLowerCase()),
   );
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "36px 20px" }}>
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(18px,3.5vw,36px) clamp(12px,3.5vw,20px)" }}>
       <div style={{ textAlign: "center", marginBottom: 36 }}>
         <h1 className="section-title">Top Companies</h1>
         <p className="section-sub">
@@ -4160,7 +4317,7 @@ const CompaniesPage = ({ setPage, setJobFilter }) => {
           />
         </div>
       </div>
-      <div className="grid-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div className="grid-4" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))" }}>
         {filtered.map((c) => (
           <div
             key={c.id}
@@ -4297,7 +4454,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "28px 20px" }}>
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "clamp(14px,3vw,28px) clamp(12px,3.5vw,20px)" }}>
       <button
         className="btn-ghost"
         onClick={() => setPage("job-detail")}
@@ -4341,7 +4498,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
         >
           {company?.logo}
         </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ flex: "1 1 200px", minWidth: "min(200px,100%)" }}>
           <h2 style={{ fontWeight: 800, fontSize: 18, color: "var(--text)" }}>
             {job.title}
           </h2>
@@ -4611,7 +4768,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
               style={{
                 border: "2px dashed var(--border)",
                 borderRadius: 14,
-                padding: "36px 20px",
+                padding: "clamp(18px,3.5vw,36px) clamp(12px,3.5vw,20px)",
                 textAlign: "center",
                 cursor: "pointer",
                 transition: "all 0.2s",
@@ -4870,8 +5027,9 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
         display: "flex",
         maxWidth: 1200,
         margin: "0 auto",
-        padding: "24px 20px",
-        gap: 24,
+        padding: "clamp(14px,3vw,24px) clamp(12px,3.5vw,20px)",
+        paddingBottom: "clamp(80px,12vw,24px)",
+        gap: "clamp(12px,2vw,24px)",
       }}
     >
       {/* Sidebar */}
@@ -4954,8 +5112,10 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
           right: 0,
           background: "var(--card)",
           borderTop: "1px solid var(--border)",
+          boxShadow: "0 -4px 20px rgba(0,0,0,0.06)",
           zIndex: 40,
           padding: "6px 0",
+          paddingBottom: "env(safe-area-inset-bottom,6px)",
         }}
       >
         {sidebarItems.slice(0, 5).map((item) => (
@@ -4983,7 +5143,7 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
         ))}
       </div>
       {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>{renderSection()}</div>
+      <div className="dash-content" style={{ flex: "1 1 0px", minWidth: 0 }}>{renderSection()}</div>
     </div>
   );
 };
@@ -5038,7 +5198,7 @@ const DashSection = ({
       <div style={{ fontWeight: 800, fontSize: 22, color: "var(--text)" }}>
         Welcome back, {user?.name?.split(" ")[0]} 👋
       </div>
-      <div className="grid-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div className="grid-4" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))" }}>
         {stats.map((s) => (
           <div key={s.label} className="card" style={{ padding: 18 }}>
             <div
@@ -6775,7 +6935,7 @@ const ChangePwModal = ({ onClose, pw, setPw, pwLoading, savePassword, userEmail 
       <div className="card" style={{
         position:"fixed", top:"50%", left:"50%",
         transform:"translate(-50%,-50%)", zIndex:100,
-        width:400, maxWidth:"92vw", padding:28,
+        width: "min(400px,94vw)", maxWidth: "94vw", padding: "clamp(16px,4vw,28px)",
         animation:"fadeUp 0.2s ease",
       }}>
         {/* Header */}
@@ -7359,7 +7519,7 @@ const SettingsSection = ({ showToast }) => {
           <div className="card" style={{
             position: "fixed", top: "50%", left: "50%",
             transform: "translate(-50%,-50%)", zIndex: 100,
-            width: 380, maxWidth: "90vw", padding: 26,
+            width: "min(380px,94vw)", maxWidth: "94vw", padding: "clamp(16px,4vw,26px)",
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>Verify Your Email</div>
@@ -7438,7 +7598,7 @@ const SettingsSection = ({ showToast }) => {
           <div className="card" style={{
             position: "fixed", top: "50%", left: "50%",
             transform: "translate(-50%,-50%)", zIndex: 100,
-            width: 400, maxWidth: "90vw", padding: 26,
+            width: "min(400px,94vw)", maxWidth: "94vw", padding: "clamp(16px,4vw,26px)",
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)" }}>
@@ -8074,7 +8234,7 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {employerJobs.map((j) => (
                 <div key={j.id} className="card" style={{ padding: 18, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                  <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ flex: "1 1 200px", minWidth: "min(200px,100%)" }}>
                     <div style={{ fontWeight: 700, color: "var(--text)" }}>{j.title}</div>
                     <div style={{ fontSize: 13, color: "var(--text-faint)", marginTop: 2 }}>
                       {j.location} · {j.jobType || "Full-time"} · Posted {j.postedAt}
@@ -8145,7 +8305,7 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
                   <div style={{ width: 44, height: 44, borderRadius: "50%", background: isShortlisted ? "linear-gradient(135deg, #059669, #22D3EE)" : hasInterview ? "linear-gradient(135deg, #D97706, #F59E0B)" : "linear-gradient(135deg, #7C3AED, #22D3EE)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, flexShrink: 0 }}>
                     {a.name.charAt(0)}
                   </div>
-                  <div style={{ flex: 1, minWidth: 150 }}>
+                  <div style={{ flex: "1 1 150px", minWidth: "min(150px,100%)" }}>
                     <div style={{ fontWeight: 700, color: "var(--text)" }}>{a.name}</div>
                     <div style={{ fontSize: 13, color: "var(--text-faint)" }}>{a.role} · {a.experience}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
@@ -8251,7 +8411,7 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
   };
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 20px" }}>
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(14px,3vw,28px) clamp(12px,3.5vw,20px)" }}>
       <div
         style={{
           fontWeight: 800,
@@ -8458,7 +8618,7 @@ const OtpBox = ({
   return (
     <div
       style={{
-        minHeight: "80vh",
+        minHeight: "100dvh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -8868,7 +9028,7 @@ const GoogleButton = ({ onLogin }) => {
 };
 
 const ProfileSetupJSX = ({ form, updateForm, strength, skills, newSkill, setNewSkill, addSkill, removeSkill, experience, newExp, setNewExp, addExperience, removeExperience, handleSave, handleSkip }) => (
-  <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px 60px" }}>
+  <div style={{ maxWidth: 900, margin: "0 auto", padding: "clamp(18px,3.5vw,32px) clamp(12px,3.5vw,20px) clamp(30px,5vw,60px)" }}>
     <div style={{ textAlign: "center", marginBottom: 24 }}>
       <h1 style={{ fontWeight: 800, fontSize: 24, color: "var(--text)" }}>Build your profile strength</h1>
       <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 6 }}>Take a minute to complete your profile. You can skip and do this later.</p>
@@ -9325,14 +9485,15 @@ const AuthPage = ({ mode, setPage, setUser }) => {
 
   // ── Shared styles ─────────────────────────────────────────────────────────
   const wrapSt = {
-    minHeight: "80vh",
+    minHeight: "100dvh",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     background: "var(--auth-bg)",
-    padding: 20,
+    padding: "clamp(12px,4vw,20px)",
+    // auth-wrap class added in JSX via className
   };
-  const cardSt = { width: "100%", maxWidth: 440, padding: 36 };
+  const cardSt = { width: "100%", maxWidth: "min(440px,96vw)", padding: "clamp(20px,5vw,36px)" };
   // Auth logo: use <AuthLogo /> component defined above
 
   // ── RENDER: OTP verification (signup) ─────────────────────────────────────
@@ -9450,7 +9611,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
     return (
       <div
         style={{
-          minHeight: "80vh",
+          minHeight: "100dvh",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -10323,7 +10484,7 @@ const ResourcesModal = ({ resource, onClose }) => {
 const ResourcesPage = () => {
   const [active, setActive] = useState(null);
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 20px" }}>
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "clamp(20px,4vw,40px) clamp(12px,3.5vw,20px)" }}>
       <div style={{ textAlign: "center", marginBottom: 48 }}>
         <h1 className="section-title">Career Resources</h1>
         <p className="section-sub">
@@ -10659,7 +10820,7 @@ export default function App() {
       >
         <style>{styles}</style>
         <Navbar page={page} setPage={setPage} user={user} setUser={setUser} />
-        <main style={{ minHeight: "calc(100vh - 64px)" }}>{renderPage()}</main>
+        <main style={{ minHeight: "calc(100dvh - 64px)" }}>{renderPage()}</main>
         {toast && (
           <Toast
             msg={toast.msg}
