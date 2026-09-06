@@ -1762,6 +1762,22 @@ const styles = `
     .hide-mobile { display: none !important; }
     .dash-layout { flex-direction: column !important; }
 
+    /* ── Global font scale-down ───────────────────────────────────────── */
+    html  { font-size: 14px; }
+    body  { font-size: 13px; }
+    p     { font-size: 13px !important; }
+    label { font-size: 12px !important; }
+    .nav-link  { font-size: 13px !important; }
+    .section-title { font-size: clamp(18px,5vw,22px) !important; }
+    .section-sub   { font-size: 13px !important; }
+    .btn-primary, .btn-outline, .btn-ghost { font-size: 13px !important; }
+    .card  { font-size: 13px; }
+    .tag   { font-size: 11px !important; padding: 3px 9px !important; }
+    .badge { font-size: 10px !important; }
+    h1 { font-size: clamp(18px,5vw,24px) !important; }
+    h2 { font-size: clamp(15px,4.5vw,19px) !important; }
+    h3 { font-size: clamp(13px,4vw,16px) !important; }
+
     /* Auth: full width card, no side panel */
     .auth-brand { display: none !important; }
     .auth-form-side { padding: 16px !important; }
@@ -1798,7 +1814,18 @@ const styles = `
   /* ── Small mobile ≤480px ───────────────────────────────────────────── */
   @media (max-width: 480px) {
     .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr !important; }
-    .section-title { font-size: clamp(18px,5vw,22px) !important; }
+    .section-title { font-size: clamp(16px,4.8vw,20px) !important; }
+
+    /* Tighter global type */
+    html  { font-size: 13px; }
+    body  { font-size: 12px; }
+    p     { font-size: 12px !important; }
+    label { font-size: 11px !important; }
+    h1    { font-size: clamp(16px,4.8vw,20px) !important; }
+    h2    { font-size: clamp(14px,4.2vw,17px) !important; }
+    h3    { font-size: clamp(12px,3.8vw,15px) !important; }
+    .section-sub { font-size: 12px !important; }
+    .btn-primary, .btn-outline, .btn-ghost { font-size: 12px !important; padding: 9px 14px !important; }
 
     /* OTP boxes — keep them fitting */
     .otp-box-input { width: 40px !important; height: 48px !important; font-size: 18px !important; }
@@ -1823,11 +1850,15 @@ const styles = `
 
   /* ── Very small ≤360px ─────────────────────────────────────────────── */
   @media (max-width: 360px) {
-    .section-title { font-size: 18px !important; }
-    .btn-primary, .btn-outline, .btn-ghost { font-size: 13px; padding: 9px 12px; }
+    html  { font-size: 12px; }
+    body  { font-size: 11px; }
+    .section-title { font-size: 16px !important; }
+    .btn-primary, .btn-outline, .btn-ghost { font-size: 12px; padding: 9px 12px; }
     .card { border-radius: 10px !important; }
     nav { padding-left: 8px !important; padding-right: 8px !important; }
     .auth-card { padding: 20px 14px !important; }
+    h1 { font-size: 16px !important; }
+    h2 { font-size: 14px !important; }
   }
 
   /* ── Touch devices ─────────────────────────────────────────────────── */
@@ -3322,24 +3353,30 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
               [
                 "For Job Seekers",
                 [
-                  "Find Jobs",
-                  "Companies",
-                  "Resume Builder",
-                  "Career Resources",
-                  "Job Alerts",
+                  ["Find Jobs",        () => setPage("jobs")],
+                  ["Companies",        () => setPage("companies")],
+                  ["Resume Builder",   () => setPage("dashboard")],
+                  ["Career Resources", () => setPage("resources")],
+                  ["Job Alerts",       () => setPage("jobs")],
                 ],
               ],
               [
                 "For Employers",
                 [
-                  "Post a Job",
-                  "Search Candidates",
-                  "Analytics",
-                  "Pricing",
-                  "Enterprise",
+                  ["Post a Job",         () => setPage("employer")],
+                  ["Search Candidates",  () => setPage("employer")],
+                  ["Analytics",          () => setPage("employer")],
+                  ["Pricing",            () => showToast("Pricing plans coming soon! 🚀")],
+                  ["Enterprise",         () => showToast("Contact us for enterprise plans 📩")],
                 ],
               ],
-              ["Company", ["About", "Blog", "Careers", "Press", "Contact"]],
+              ["Company", [
+                ["About",    () => showToast("About page coming soon!")],
+                ["Blog",     () => showToast("Blog coming soon! ✍️")],
+                ["Careers",  () => setPage("jobs")],
+                ["Press",    () => showToast("Press kit available soon 📰")],
+                ["Contact",  () => showToast("Email us at hello@careernova.in 📧")],
+              ]],
             ].map(([title, links]) => (
               <div key={title}>
                 <div
@@ -3352,9 +3389,10 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
                 >
                   {title}
                 </div>
-                {links.map((l) => (
+                {links.map(([label, handler]) => (
                   <div
-                    key={l}
+                    key={label}
+                    onClick={handler}
                     style={{
                       fontSize: 13,
                       marginBottom: 10,
@@ -3362,9 +3400,9 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
                       transition: "color 0.15s",
                     }}
                     onMouseEnter={(e) => (e.target.style.color = "#A78BFA")}
-                    onMouseLeave={(e) => (e.target.style.color = "var(--text-faint)")}
+                    onMouseLeave={(e) => (e.target.style.color = "")}
                   >
-                    {l}
+                    {label}
                   </div>
                 ))}
               </div>
@@ -3384,7 +3422,23 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
             <span style={{ fontSize: 13 }}>
               © 2026 CareerNova. All rights reserved.
             </span>
-            <span style={{ fontSize: 13 }}>Privacy · Terms · Cookies</span>
+            <span style={{ display: "flex", gap: 16, fontSize: 13, flexWrap: "wrap" }}>
+              {[
+                ["Privacy",  "Privacy Policy coming soon 🔒"],
+                ["Terms",    "Terms of Service coming soon 📄"],
+                ["Cookies",  "Cookie Policy coming soon 🍪"],
+              ].map(([label, msg]) => (
+                <span
+                  key={label}
+                  onClick={() => showToast(msg)}
+                  style={{ cursor: "pointer", transition: "color 0.15s" }}
+                  onMouseEnter={(e) => (e.target.style.color = "#A78BFA")}
+                  onMouseLeave={(e) => (e.target.style.color = "")}
+                >
+                  {label}
+                </span>
+              ))}
+            </span>
           </div>
         </div>
       </footer>
