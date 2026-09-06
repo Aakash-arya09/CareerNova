@@ -1632,14 +1632,13 @@ const styles = `
   .nav-link:hover { color: var(--violet); }
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; backdrop-filter: blur(2px); }
   /* ── Utilities ─────────────────────────────────────────────────────── */
-  .show-mobile  { display: none; }
-  .hide-mobile  { display: flex; }
+  .show-mobile { display: none  !important; }
+  .hide-mobile { display: flex; }
 
-  /* Above 640px: always show sidebar, never show mobile tab bar */
+  /* ≥641px: desktop/tablet — sidebar always visible, tab bar hidden */
   @media (min-width: 641px) {
     .show-mobile { display: none !important; }
     .hide-mobile { display: flex !important; }
-    .dash-layout { flex-direction: row !important; }
   }
 
   /* ── Scrollbar ──────────────────────────────────────────────────────── */
@@ -5036,30 +5035,36 @@ const DashboardPage = ({ user, setPage, setJobFilter, profile, setProfile }) => 
 
   return (
     <>
+    {/* ── Dashboard layout: sidebar + content side by side ── */}
     <div
-      className="dash-layout"
       style={{
         display: "flex",
         alignItems: "flex-start",
         maxWidth: 1200,
         margin: "0 auto",
         padding: "clamp(14px,3vw,24px) clamp(12px,3.5vw,20px)",
-        gap: "clamp(12px,2vw,24px)",
+        gap: 24,
       }}
     >
-      {/* Sidebar */}
+      {/* Sidebar — vertical nav column, desktop only */}
       <div
-        className="card hide-mobile"
+        className="hide-mobile"
         style={{
           width: 230,
-          minWidth: 220,
           flexShrink: 0,
-          padding: 16,
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
           alignSelf: "flex-start",
           position: "sticky",
           top: 76,
-          maxHeight: "calc(100vh - 96px)",
+          background: "var(--card)",
+          borderRadius: 16,
+          border: "1px solid var(--border)",
+          boxShadow: "var(--shadow)",
+          padding: 16,
           overflowY: "auto",
+          maxHeight: "calc(100dvh - 96px)",
         }}
       >
         <div
