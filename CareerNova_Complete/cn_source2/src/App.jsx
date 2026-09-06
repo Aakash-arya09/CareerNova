@@ -6747,6 +6747,7 @@ const SegmentedChoice = ({ options, value, onChange }) => (
 
 // ─── CHANGE PASSWORD MODAL (with "Forgot current password?" link) ─────────────
 const ChangePwModal = ({ onClose, pw, setPw, pwLoading, savePassword, userEmail }) => {
+  const auth = getAuth();   // ← fix: declare auth inside the component
   const [sending, setSending] = useState(false);
   const [sent,    setSent]    = useState(false);
   const { showToast } = useContext(AppContext);
@@ -9193,14 +9194,14 @@ const AuthPage = ({ mode, setPage, setUser }) => {
       setPage("dashboard");
     } catch (err) {
       setLoading(false);
+      // Firebase v9+ uses auth/invalid-credential for both wrong password AND no account
       if (
         err.code === "auth/user-not-found" ||
         err.code === "auth/invalid-credential" ||
         err.code === "auth/wrong-password" ||
-        err.code === "auth/invalid-email"
+        err.code === "auth/invalid-email" ||
+        err.code === "auth/invalid-login-credentials"
       ) {
-        // Firebase combines wrong-password + user-not-found into invalid-credential
-        // Don't reveal whether email exists — say credentials are wrong
         setError("Incorrect email or password. Please try again.");
       } else if (err.code === "auth/too-many-requests") {
         setError("Too many failed attempts. Please wait a few minutes or reset your password.");
@@ -9232,17 +9233,19 @@ const AuthPage = ({ mode, setPage, setUser }) => {
     setError("");
     try {
       await resetPasswordEmail(otpEmail);
-      setLoading(false);
-      setStep("reset-sent");
-      showToast("Password reset email sent! Check your inbox 📧");
     } catch (err) {
-      setLoading(false);
-      if (err.code === "auth/user-not-found") {
-        setError("No account found with this email.");
-      } else {
+      // Silently swallow auth/user-not-found so we don't reveal if email is registered.
+      // Only surface unexpected errors (network failures etc.)
+      if (err.code !== "auth/user-not-found" && err.code !== "auth/invalid-email") {
+        setLoading(false);
         setError(err.message || "Could not send reset email. Try again.");
+        return;
       }
     }
+    // Always show success — whether the email exists or not
+    setLoading(false);
+    setStep("reset-sent");
+    showToast("If this email is registered, a reset link has been sent! 📧");
   };
 
   // ── Forgot password: verify OTP + set new password ────────────────────────
