@@ -1600,6 +1600,7 @@ const styles = `
   .google-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .auth-or { display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; color: var(--text-faint); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
   .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .otp-box-input { min-height: unset !important; }
   .divider { height: 1px; background: var(--border); margin: 24px 0; }
   .sidebar-link {
     display: flex;
@@ -1710,77 +1711,83 @@ const styles = `
   [data-theme="dark"] .card { box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
 
   /* ════════════════════════════════════════════════════════════════════
-     PROFESSIONAL RESPONSIVE SYSTEM
-     — mobile-first, fluid sizing, safe-area aware, touch-friendly
-     Breakpoints: 1280 · 1024 · 768 · 600 · 480 · 360
+     RESPONSIVE SYSTEM — mobile-first, fluid, safe-area aware
+     Breakpoints: 1280 · 1024 · 768 · 640 · 480 · 360
      ════════════════════════════════════════════════════════════════════ */
 
-  /* ── Large desktop / 4K ≥1280px ──────────────────────────────────── */
+  /* Global: prevent horizontal overflow on every page */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { overflow-x: hidden; max-width: 100vw; }
+
+  /* ── Large desktop ≥1280px ─────────────────────────────────────────── */
   @media (min-width: 1280px) {
     .grid-4 { grid-template-columns: repeat(4,1fr); }
     .grid-3 { grid-template-columns: repeat(3,1fr); }
   }
 
-  /* ── Tablet landscape  ≤1024px ────────────────────────────────────── */
+  /* ── Tablet landscape ≤1024px ──────────────────────────────────────── */
   @media (max-width: 1024px) {
     .grid-4 { grid-template-columns: repeat(2,1fr); }
     .grid-3 { grid-template-columns: repeat(2,1fr); }
+    /* Footer grid collapse */
+    .footer-grid { grid-template-columns: 1fr 1fr !important; gap: 24px !important; }
+    /* Job detail sidebar stacks */
+    .job-detail-grid { grid-template-columns: 1fr !important; }
   }
 
-  /* ── Tablet portrait  ≤768px ─────────────────────────────────────── */
+  /* ── Tablet portrait ≤768px ────────────────────────────────────────── */
   @media (max-width: 768px) {
-    /* Sidebar stays visible on tablets — only hidden on phones (≤640px) */
-    /* Typography */
+    .show-mobile { display: flex !important; }
     .section-title { font-size: clamp(20px,5.5vw,26px) !important; line-height:1.25 !important; }
     .section-sub   { font-size: clamp(13px,3.5vw,15px) !important; }
 
-    /* Show/hide — general mobile */
-    .show-mobile { display: flex !important; }
-
-    /* Buttons — keep usable on small screens */
-    .btn-primary, .btn-outline, .btn-ghost {
-      font-size: 13px;
-      padding: 9px 14px;
-      min-height: 44px;
-    }
+    /* Touch targets */
+    .btn-primary, .btn-outline, .btn-ghost { font-size: 14px; padding: 10px 16px; min-height: 44px; }
     .btn-primary { white-space: normal; word-break: break-word; }
-
-    /* Inputs — 16px prevents iOS auto-zoom */
     input, select, textarea { font-size: 16px !important; min-height: 44px; }
-
-    /* Cards */
+    .sidebar-link { min-height: 44px; }
     .card { border-radius: 12px !important; }
 
-    /* Sidebar links */
-    .sidebar-link { min-height: 44px; }
-
-    /* Grid collapses */
+    /* Grids */
     .grid-2 { grid-template-columns: 1fr !important; }
     .grid-3 { grid-template-columns: 1fr 1fr !important; }
     .grid-4 { grid-template-columns: 1fr 1fr !important; }
 
-    /* Dashboard: tab bar lives at bottom, content needs clearance */
-    .dash-content { padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important; }
-
-    /* Overlay / drawer safe width */
-    .drawer { width: min(300px, 88vw) !important; }
+    /* Dashboard bottom tab bar clearance */
+    .dash-content { padding-bottom: calc(68px + env(safe-area-inset-bottom,0px)) !important; }
   }
 
-  /* ── Phone  ≤640px — hide desktop sidebar, show mobile tab bar ─── */
+  /* ── Phone ≤640px — hide desktop sidebar, show tab bar ────────────── */
   @media (max-width: 640px) {
-    .hide-mobile  { display: none !important; }
-    .dash-layout  { flex-direction: column !important; }
-  }
+    .hide-mobile { display: none !important; }
+    .dash-layout { flex-direction: column !important; }
 
-  /* ── Mobile  ≤600px ─────────────────────────────────────────────── */
-  @media (max-width: 600px) {
-    .grid-3 { grid-template-columns: 1fr !important; }
-    .grid-4 { grid-template-columns: 1fr 1fr !important; }
+    /* Auth: full width card, no side panel */
+    .auth-brand { display: none !important; }
+    .auth-form-side { padding: 16px !important; }
+    .auth-card { padding: 24px 20px !important; border-radius: 16px !important; max-width: 100% !important; }
 
-    /* Auth card stretch */
-    .auth-card { padding: clamp(20px,5vw,36px) !important; }
+    /* Hero search bar stacks */
+    .hero-search-bar { flex-direction: column !important; gap: 8px !important; }
+    .hero-search-bar > div { border-left: none !important; padding-left: 0 !important; width: 100% !important; flex: unset !important; }
+    .hero-search-divider { display: none !important; }
 
-    /* Toast above mobile tab bar */
+    /* Footer: single column */
+    .footer-grid { grid-template-columns: 1fr !important; gap: 20px !important; }
+
+    /* Job detail: single column */
+    .job-detail-grid { grid-template-columns: 1fr !important; }
+
+    /* Jobs page layout stacks */
+    .jobs-layout { grid-template-columns: 1fr !important; }
+
+    /* Profile setup experience grid */
+    .exp-grid { grid-template-columns: 1fr !important; }
+
+    /* Employer stats */
+    .employer-stats { grid-template-columns: 1fr 1fr !important; }
+
+    /* Toast position */
     .toast-box {
       bottom: calc(68px + env(safe-area-inset-bottom,0px)) !important;
       left: 12px !important; right: 12px !important;
@@ -1788,64 +1795,72 @@ const styles = `
     }
   }
 
-  /* ── Small mobile  ≤480px ────────────────────────────────────────── */
+  /* ── Small mobile ≤480px ───────────────────────────────────────────── */
   @media (max-width: 480px) {
     .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr !important; }
     .section-title { font-size: clamp(18px,5vw,22px) !important; }
 
-    /* Modals go near-full-width */
+    /* OTP boxes — keep them fitting */
+    .otp-box-input { width: 40px !important; height: 48px !important; font-size: 18px !important; }
+
+    /* Modals */
     .modal-sheet {
-      width: 96vw !important;
-      max-width: 96vw !important;
-      padding: clamp(14px,4vw,20px) !important;
-      border-radius: 16px !important;
+      width: 96vw !important; max-width: 96vw !important;
+      padding: clamp(14px,4vw,20px) !important; border-radius: 16px !important;
     }
-    /* Action button rows stack */
+    /* Button rows stack */
     .action-row { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
     .action-row > * { width: 100% !important; justify-content: center !important; }
+
+    /* Profile setup step indicators — tighten up */
+    .setup-steps { gap: 4px !important; }
+    .setup-step-label { display: none !important; }
+
+    /* Employer stats: still 2 col but narrower */
+    .employer-stats { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+    .employer-stats .card { padding: 14px !important; }
   }
 
-  /* ── Very small phones  ≤360px (Galaxy A, budget phones) ─────────── */
+  /* ── Very small ≤360px ─────────────────────────────────────────────── */
   @media (max-width: 360px) {
     .section-title { font-size: 18px !important; }
-    .btn-primary, .btn-outline, .btn-ghost { font-size: 12px; padding: 8px 10px; }
+    .btn-primary, .btn-outline, .btn-ghost { font-size: 13px; padding: 9px 12px; }
     .card { border-radius: 10px !important; }
     nav { padding-left: 8px !important; padding-right: 8px !important; }
+    .auth-card { padding: 20px 14px !important; }
   }
 
-  /* ── Touch / coarse pointer (any touch device) ──────────────────── */
+  /* ── Touch devices ─────────────────────────────────────────────────── */
   @media (hover:none) and (pointer:coarse) {
     button, [role="button"], .sidebar-link, .nav-link,
     .btn-primary, .btn-outline, .btn-ghost,
     input, select, textarea { min-height: 44px; }
-
-    /* Disable sticky hover states that get stuck on touch */
-    .job-card:hover    { transform: none !important; box-shadow: var(--shadow)   !important; }
-    .company-card:hover{ transform: none !important; box-shadow: var(--shadow)   !important; }
-    .btn-primary:hover { transform: none !important; opacity: 1 !important; }
-    .btn-outline:hover { transform: none !important; }
+    .job-card:hover     { transform: none !important; box-shadow: var(--shadow) !important; }
+    .company-card:hover { transform: none !important; box-shadow: var(--shadow) !important; }
+    .btn-primary:hover  { transform: none !important; opacity: 1 !important; }
+    .btn-outline:hover  { transform: none !important; }
   }
 
-  /* ── Landscape phone  (height ≤ 480px, width > height) ─────────── */
+  /* ── Landscape phone ───────────────────────────────────────────────── */
   @media (max-height: 480px) and (orientation: landscape) {
     nav  { height: 50px !important; }
     main { min-height: calc(100dvh - 50px) !important; }
     .hero-section { padding-top: 16px !important; padding-bottom: 16px !important; }
-    .auth-wrap  { padding: 8px 16px !important; min-height: unset !important; }
+    .auth-wrap { padding: 8px 16px !important; min-height: unset !important; }
   }
 
-  /* ── High-density / retina (cosmetic only) ──────────────────────── */
+  /* ── Retina ────────────────────────────────────────────────────────── */
   @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
     ::-webkit-scrollbar { width: 4px; }
   }
 
-  /* ── Print ──────────────────────────────────────────────────────── */
+  /* ── Print ─────────────────────────────────────────────────────────── */
   @media print {
     nav, .show-mobile, footer, .toast-box { display: none !important; }
     .card { box-shadow: none !important; border: 1px solid #ccc !important; }
-    main  { min-height: auto !important; }
-    body  { background: white !important; color: #000 !important; }
-    a     { color: #000 !important; text-decoration: underline; }
+    main { min-height: auto !important; }
+    body { background: white !important; color: #000 !important; }
+    a    { color: #000 !important; text-decoration: underline; }
   }
 `;
 
@@ -2586,7 +2601,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
           </p>
           {/* Search Bar */}
           <div
-            className="glass"
+            className="glass hero-search-bar"
             style={{
               borderRadius: 18,
               padding: "16px 16px",
@@ -2894,12 +2909,12 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
         }}
       >
         <div
+          className="grid-2"
           style={{
             maxWidth: 1100,
             margin: "0 auto",
             padding: "0 clamp(12px,3.5vw,20px)",
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
             gap: 48,
             alignItems: "center",
           }}
@@ -3279,6 +3294,7 @@ const HomePage = ({ setPage, setJobFilter, user }) => {
       >
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div
+            className="footer-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "2fr 1fr 1fr 1fr",
@@ -3801,6 +3817,7 @@ const JobDetailPage = ({ job, setPage, setJobFilter, user }) => {
         Back to Jobs
       </button>
       <div
+        className="job-detail-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 320px",
@@ -4581,7 +4598,7 @@ const JobApplicationPage = ({ job, setPage, setJobFilter, user }) => {
         Fill out the form below to submit your application to {company?.name}.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+      <div className="grid-2" style={{ display: "grid", gap: 24 }}>
         {/* Left Column – Form */}
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {/* Personal Information */}
@@ -6624,7 +6641,7 @@ const ResumeSection = ({ showToast }) => {
           </button>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div className="grid-2" style={{ display: "grid", gap: 20 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Personal Details */}
           <div className="card" style={{ padding: 18 }}>
@@ -7738,8 +7755,8 @@ const EmployerPage = ({ setPage, user, employerJobs, setEmployerJobs, employerAp
       return (
         <div>
           <div
-            className="grid-3"
-            style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 24 }}
+            className="grid-4 employer-stats"
+            style={{ marginBottom: 24 }}
           >
             {stats.map((s) => (
               <div key={s.label} className="card" style={{ padding: 18 }}>
@@ -9054,19 +9071,19 @@ const GoogleButton = ({ onLogin }) => {
 };
 
 const ProfileSetupJSX = ({ form, updateForm, strength, skills, newSkill, setNewSkill, addSkill, removeSkill, experience, newExp, setNewExp, addExperience, removeExperience, handleSave, handleSkip }) => (
-  <div style={{ maxWidth: 900, margin: "0 auto", padding: "clamp(18px,3.5vw,32px) clamp(12px,3.5vw,20px) clamp(30px,5vw,60px)" }}>
+  <div style={{ maxWidth: 760, margin: "0 auto", padding: "clamp(16px,3.5vw,32px) clamp(12px,3.5vw,20px) clamp(30px,5vw,60px)" }}>
     <div style={{ textAlign: "center", marginBottom: 24 }}>
-      <h1 style={{ fontWeight: 800, fontSize: 24, color: "var(--text)" }}>Build your profile strength</h1>
+      <h1 style={{ fontWeight: 800, fontSize: "clamp(20px,5vw,24px)", color: "var(--text)" }}>Build your profile strength</h1>
       <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 6 }}>Take a minute to complete your profile. You can skip and do this later.</p>
     </div>
-    <div className="card" style={{ padding: 22, marginBottom: 20 }}>
+    <div className="card" style={{ padding: "clamp(16px,3vw,22px)", marginBottom: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={{ fontWeight: 700, color: "var(--text)" }}>Profile Strength</div>
         <span style={{ fontWeight: 700, color: "#7C3AED", fontSize: 18 }}>{strength}%</span>
       </div>
       <div className="progress-bar"><div className="progress-fill" style={{ width: `${strength}%` }} /></div>
     </div>
-    <div className="card" style={{ padding: 24 }}>
+    <div className="card" style={{ padding: "clamp(16px,3vw,24px)" }}>
       <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", marginBottom: 14 }}>Basic Info</div>
       <div className="grid-2">
         <div className="form-group"><label>Full Name</label><input value={form.name} onChange={(e) => updateForm("name", e.target.value)} /></div>
@@ -9076,40 +9093,40 @@ const ProfileSetupJSX = ({ form, updateForm, strength, skills, newSkill, setNewS
       </div>
       <div className="form-group" style={{ marginTop: 12 }}><label>About</label><textarea value={form.about} onChange={(e) => updateForm("about", e.target.value)} placeholder="Short professional summary" rows={3} /></div>
     </div>
-    <div className="card" style={{ padding: 24, marginTop: 20 }}>
+    <div className="card" style={{ padding: "clamp(16px,3vw,24px)", marginTop: 20 }}>
       <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", marginBottom: 14 }}>Skills</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         {skills.map((s) => (<span key={s} className="tag">{s}<button onClick={() => removeSkill(s)} style={{ background: "none", border: "none", cursor: "pointer", color: "#7C3AED", marginLeft: 4, padding: 0, fontSize: 12 }}>×</button></span>))}
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }} placeholder="Add a skill" style={{ padding: "6px 10px", borderRadius: 8, border: "1.5px solid var(--border)", fontSize: 12, width: 140, outline: "none", background: "var(--card)", color: "var(--text)" }} />
-          <button className="btn-ghost" style={{ padding: "6px 12px", fontSize: 12 }} onClick={addSkill}><Icon name="plus" size={12} /> Add</button>
-        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }} placeholder="Add a skill" style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1.5px solid var(--border)", fontSize: 14, outline: "none", background: "var(--card)", color: "var(--text)", minHeight: 44 }} />
+        <button className="btn-ghost" style={{ padding: "8px 16px", whiteSpace: "nowrap" }} onClick={addSkill}><Icon name="plus" size={14} /> Add</button>
       </div>
     </div>
-    <div className="card" style={{ padding: 24, marginTop: 20 }}>
+    <div className="card" style={{ padding: "clamp(16px,3vw,24px)", marginTop: 20 }}>
       <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text)", marginBottom: 14 }}>Experience</div>
-      {experience.length === 0 ? (<p style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 12 }}>No experience added yet. Add your work history below.</p>) : null}
+      {experience.length === 0 ? (<p style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 12 }}>No experience added yet.</p>) : null}
       {experience.map((e, i) => (
-        <div key={i} style={{ display: "flex", gap: 14, paddingBottom: 16, borderBottom: i < experience.length - 1 ? "1px solid var(--border-soft)" : "none", marginBottom: i < experience.length - 1 ? 16 : 0 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--tint-violet)", display: "flex", alignItems: "center", justifyContent: "center", color: "#7C3AED", flexShrink: 0 }}><Icon name="briefcase" size={16} /></div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, color: "var(--text)" }}>{e.role}</div>
+        <div key={i} style={{ display: "flex", gap: 12, paddingBottom: 16, borderBottom: i < experience.length - 1 ? "1px solid var(--border-soft)" : "none", marginBottom: i < experience.length - 1 ? 16 : 0 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--tint-violet)", display: "flex", alignItems: "center", justifyContent: "center", color: "#7C3AED", flexShrink: 0 }}><Icon name="briefcase" size={16} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, color: "var(--text)", wordBreak: "break-word" }}>{e.role}</div>
             <div style={{ fontSize: 13, color: "#7C3AED", fontWeight: 600 }}>{e.company}</div>
             <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>{e.period}</div>
             {e.desc && <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{e.desc}</div>}
           </div>
-          <button onClick={() => removeExperience(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", fontSize: 18, alignSelf: "flex-start", padding: 0 }}>×</button>
+          <button onClick={() => removeExperience(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", fontSize: 18, alignSelf: "flex-start", padding: 0, flexShrink: 0 }}>×</button>
         </div>
       ))}
-      <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="grid-2 exp-grid" style={{ marginTop: 16, gap: 12 }}>
         <div className="form-group"><label>Role / Title</label><input value={newExp.role} onChange={(e) => setNewExp((p) => ({ ...p, role: e.target.value }))} placeholder="e.g. Frontend Developer" /></div>
         <div className="form-group"><label>Company</label><input value={newExp.company} onChange={(e) => setNewExp((p) => ({ ...p, company: e.target.value }))} placeholder="e.g. Tech Corp" /></div>
         <div className="form-group"><label>Period</label><input value={newExp.period} onChange={(e) => setNewExp((p) => ({ ...p, period: e.target.value }))} placeholder="e.g. 2022 – Present" /></div>
         <div className="form-group"><label>Description</label><input value={newExp.desc} onChange={(e) => setNewExp((p) => ({ ...p, desc: e.target.value }))} placeholder="Brief description" /></div>
       </div>
-      <button className="btn-ghost" style={{ marginTop: 4 }} onClick={addExperience}><Icon name="plus" size={13} /> Add Experience</button>
+      <button className="btn-ghost" style={{ marginTop: 12, width: "100%", justifyContent: "center" }} onClick={addExperience}><Icon name="plus" size={13} /> Add Experience</button>
     </div>
-    <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 20 }}>
+    <div style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 12, marginTop: 20 }}>
       <button className="btn-ghost" style={{ padding: "12px 24px" }} onClick={handleSkip}>Skip for now</button>
       <button className="btn-primary" style={{ padding: "12px 24px" }} onClick={handleSave}><Icon name="check" size={15} /> Save & Continue</button>
     </div>
@@ -9702,6 +9719,7 @@ const AuthPage = ({ mode, setPage, setUser }) => {
                 }
                 onKeyDown={(e) => lockTimer === 0 && handleOtpBackspace(i, e)}
                 disabled={lockTimer > 0}
+                className="otp-box-input"
                 style={{
                   width: 46,
                   height: 54,
